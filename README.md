@@ -138,4 +138,5 @@ MIT License
 
 ---
 
-For questions or support, open an issue or contact the maintainer.
+For questions or support, open an issue or contact the [Gibson Oluka](http://github.com/OlukaGibson)
+
