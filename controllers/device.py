@@ -1,0 +1,245 @@
+import random
+import string
+from sqlalchemy.orm import Session
+from models.device import Devices
+from models.firmware import Firmware
+from models.profile import Profiles
+from models.devicedata_value import DeviceData
+from models.config_value import ConfigValues
+from models.metadata_value import MetadataValues
+import uuid
+from datetime import datetime
+from fastapi import HTTPException
+
+class DeviceController:
+    @staticmethod
+    def create_device(db: Session, organisation_id, device_data):
+        # Check for duplicate name, readkey, writekey, deviceID
+        if db.query(Devices).filter_by(name=device_data.name).first():
+            raise HTTPException(status_code=400, detail=f"Device name '{device_data.name}' already exists.")
+        # Optionally check for readkey/writekey uniqueness if you allow custom keys
+        # if db.query(Devices).filter_by(readkey=device_data.readkey).first():
+        #     raise HTTPException(status_code=400, detail="Device readkey already exists.")
+        # if db.query(Devices).filter_by(writekey=device_data.writekey).first():
+        #     raise HTTPException(status_code=400, detail="Device writekey already exists.")
+
+        # Generate random keys
+        writekey = ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
+        readkey = ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
+        # Get next deviceID
+        last_device = db.query(Devices).order_by(Devices.deviceID.desc()).first()
+        deviceID = (last_device.deviceID + 1) if last_device else 1
+
+        # Check for duplicate deviceID (should not happen, but for safety)
+        if db.query(Devices).filter_by(deviceID=deviceID).first():
+            raise HTTPException(status_code=400, detail=f"DeviceID '{deviceID}' already exists.")
+
+        new_device = Devices(
+            name=device_data.name,
+            readkey=readkey,
+            writekey=writekey,
+            deviceID=deviceID,
+            networkID=device_data.networkID,
+            currentFirmwareVersion=device_data.currentFirmwareVersion,
+            previousFirmwareVersion=device_data.previousFirmwareVersion,
+            targetFirmwareVersion=device_data.targetFirmwareVersion,
+            fileDownloadState=device_data.fileDownloadState,
+            profile=device_data.profile,
+            firmwareDownloadState=device_data.firmwareDownloadState
+        )
+        db.add(new_device)
+        db.commit()
+        db.refresh(new_device)
+        # Return the ORM object for FastAPI response serialization
+        return new_device
+
+    @staticmethod
+    def get_devices(db: Session, organisation_id):
+        devices = db.query(Devices).all()
+        devices_list = []
+        for device in devices:
+            currentFirmware = db.query(Firmware).filter_by(id=device.currentFirmwareVersion).first()
+            previousFirmware = db.query(Firmware).filter_by(id=device.previousFirmwareVersion).first()
+            targetFirmware = db.query(Firmware).filter_by(id=device.targetFirmwareVersion).first()
+            currentFirmwareVersion = currentFirmware.firmware_version if currentFirmware else None
+            previousFirmwareVersion = previousFirmware.firmware_version if previousFirmware else currentFirmwareVersion
+            targetFirmwareVersion = targetFirmware.firmware_version if targetFirmware else currentFirmwareVersion
+            profile = db.query(Profiles).filter_by(id=device.profile).first()
+            profile_name = profile.name if profile else None
+            last_metadata_entry = db.query(DeviceData).filter_by(deviceID=device.deviceID).order_by(DeviceData.created_at.desc()).first()
+            last_posted_time = last_metadata_entry.created_at if last_metadata_entry else None
+            device_dict = {
+                'id': device.id,
+                'name': device.name,
+                'readkey': device.readkey,
+                'writekey': device.writekey,
+                'deviceID': device.deviceID,
+                'networkID': device.networkID,
+                'currentFirmwareVersion': currentFirmwareVersion,
+                'previousFirmwareVersion': previousFirmwareVersion,
+                'targetFirmwareVersion': targetFirmwareVersion,
+                'fileDownloadState': device.fileDownloadState,
+                'profile': device.profile,
+                'profile_name': profile_name,
+                'last_posted_time': last_posted_time,
+                'created_at': device.created_at,
+                'firmwareDownloadState': device.firmwareDownloadState,
+            }
+            devices_list.append(device_dict)
+        return devices_list
+
+    @staticmethod
+    def get_device(db: Session, organisation_id, deviceID):
+        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        if not device:
+            return {'message': 'Device not found!'}, 404
+        currentFirmware = db.query(Firmware).filter_by(id=device.currentFirmwareVersion).first()
+        previousFirmware = db.query(Firmware).filter_by(id=device.previousFirmwareVersion).first()
+        targetFirmware = db.query(Firmware).filter_by(id=device.targetFirmwareVersion).first()
+        currentFirmwareVersion = currentFirmware.firmware_version if currentFirmware else None
+        previousFirmwareVersion = previousFirmware.firmware_version if previousFirmware else None
+        targetFirmwareVersion = targetFirmware.firmware_version if targetFirmware else None
+        deviceProfile = db.query(Profiles).filter_by(id=device.profile).first()
+        if deviceProfile:
+            profile_dict = {
+                'id': deviceProfile.id,
+                'name': deviceProfile.name,
+                'description': deviceProfile.description,
+                'created_at': deviceProfile.created_at,
+                'fields': {},
+                'configs': {},
+                'metadata': {}
+            }
+            for i in range(1, 16):
+                val = getattr(deviceProfile, f'field{i}', None)
+                if val is not None:
+                    profile_dict['fields'][f'field{i}'] = val
+                mval = getattr(deviceProfile, f'metadata{i}', None)
+                if mval is not None:
+                    profile_dict['metadata'][f'metadata{i}'] = mval
+            for i in range(1, 11):
+                cval = getattr(deviceProfile, f'config{i}', None)
+                if cval is not None:
+                    profile_dict['configs'][f'config{i}'] = cval
+        else:
+            profile_dict = None
+        device_data = db.query(DeviceData).filter_by(deviceID=deviceID).order_by(DeviceData.created_at.desc()).limit(100).all()
+        config_data = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).limit(100).all()
+        meta_data = db.query(MetadataValues).filter_by(deviceID=deviceID).order_by(MetadataValues.created_at.desc()).limit(100).all()
+        device_data_list = []
+        config_data_list = []
+        meta_data_list = []
+        for data in meta_data:
+            data_dict = {
+                'entryID': data.id,
+                'created_at': data.created_at,
+            }
+            for i in range(1, 16):
+                val = getattr(data, f'metadata{i}', None)
+                if val:
+                    data_dict[f'metadata{i}'] = val
+            meta_data_list.append(data_dict)
+        for data in config_data:
+            data_dict = {
+                'entryID': data.id,
+                'created_at': data.created_at,
+            }
+            for i in range(1, 11):
+                val = getattr(data, f'config{i}', None)
+                if val:
+                    data_dict[f'config{i}'] = val
+            config_data_list.append(data_dict)
+        for data in device_data:
+            data_dict = {
+                'entryID': data.id,
+                'created_at': data.created_at,
+            }
+            for i in range(1, 16):
+                val = getattr(data, f'field{i}', None)
+                if val:
+                    data_dict[f'field{i}'] = val
+            device_data_list.append(data_dict)
+        device_dict = {
+            'id': device.id,
+            'created_at': device.created_at,
+            'name': device.name,
+            'readkey': device.readkey,
+            'writekey': device.writekey,
+            'deviceID': device.deviceID,
+            'profile': device.profile,
+            'currentFirmwareVersion': currentFirmwareVersion,
+            'targetFirmwareVersion': targetFirmwareVersion,
+            'previousFirmwareVersion': previousFirmwareVersion,
+            'networkID': device.networkID,
+            'fileDownloadState': device.fileDownloadState,
+            'device_data': device_data_list,
+            'config_data': config_data_list,
+            'meta_data': meta_data_list,
+            'profile': profile_dict
+        }
+        return device_dict
+
+    @staticmethod
+    def update_device(db: Session, organisation_id, deviceID, device_update):
+        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        if not device:
+            return {'message': 'Device not found!'}, 404
+        # Update fields
+        device.name = device_update.name or device.name
+        device.networkID = device_update.networkID or device.networkID
+        device.currentFirmwareVersion = device_update.currentFirmwareVersion or device.currentFirmwareVersion
+        device.previousFirmwareVersion = device_update.previousFirmwareVersion or device.previousFirmwareVersion
+        device.targetFirmwareVersion = device_update.targetFirmwareVersion or device.targetFirmwareVersion
+        device.fileDownloadState = device_update.fileDownloadState if device_update.fileDownloadState is not None else device.fileDownloadState
+        device.profile = device_update.profile or device.profile
+        device.firmwareDownloadState = device_update.firmwareDownloadState or device.firmwareDownloadState
+        db.commit()
+        db.refresh(device)
+        return {'message': 'Device updated successfully!'}
+
+    @staticmethod
+    def update_firmware(db: Session, organisation_id, deviceID, firmwareID, firmwareVersion):
+        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        if not device:
+            return {'message': 'Device not found!'}, 404
+        firmware = db.query(Firmware).filter_by(id=firmwareID, firmware_version=firmwareVersion).first()
+        if not firmware:
+            return {'message': 'Firmware not found or version mismatch!'}, 404
+        device.targetFirmwareVersion = firmwareID
+        if device.currentFirmwareVersion == firmwareID:
+            device.firmwareDownloadState = 'updated'
+        else:
+            device.firmwareDownloadState = 'pending'
+        db.commit()
+        db.refresh(device)
+        return {'message': 'Device firmware update initiated successfully!'}
+
+    @staticmethod
+    def self_config(db: Session, organisation_id, networkID):
+        device = db.query(Devices).filter_by(networkID=networkID).first()
+        if not device:
+            return {'message': 'Device not found!'}, 404
+        try:
+            profile = db.query(Profiles).filter_by(id=device.profile).first()
+            latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
+            device_details = {
+                'name': device.name,
+                'deviceID': device.deviceID,
+                'networkID': device.networkID,
+                'writekey': device.writekey,
+                'readkey': device.readkey,
+                'configs': {}
+            }
+            if profile and latest_config:
+                for i in range(1, 11):
+                    config_name = getattr(profile, f'config{i}', None)
+                    if config_name:
+                        config_value = getattr(latest_config, f'config{i}', None)
+                        device_details['configs'][config_name] = config_value
+            return device_details
+        # except Exception as e:
+        #     return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
+        #                 device_details['configs'][config_name] = config_value
+        #     return device_details
+        except Exception as e:
+            return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
