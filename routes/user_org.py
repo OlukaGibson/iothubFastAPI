@@ -6,8 +6,27 @@ from utils.error_codes import ResponseModel
 from utils.security import verify_password, get_password_hash
 import uuid
 from typing import List
+import jwt
+from datetime import datetime, timedelta
+import os
 
 router = APIRouter()
+
+JWT_SECRET = os.getenv("JWT_SECRET", "your_secret_key")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+JWT_EXP_DELTA_SECONDS = int(os.getenv("JWT_EXP_DELTA_SECONDS", "3600"))
+
+# Example: In-memory blacklist (use Redis or DB for production)
+jwt_blacklist = set()
+
+def create_jwt_token(user):
+    payload = {
+        "user_id": str(user.id),
+        "email": user.email,
+        "is_admin": user.is_admin,  # Assuming user model has is_admin attribute
+        "exp": datetime.utcnow() + timedelta(seconds=JWT_EXP_DELTA_SECONDS)
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 @router.post("/login")
 def login(
@@ -19,15 +38,22 @@ def login(
     user = db.query(User).filter(User.email == email).first()
     if not user or not user.verify_password(password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    # Here you would generate and return a JWT or session token
-    # For demo, just return user info
-    return {"message": "Login successful", "user_id": str(user.id), "token": user.token}
+    token = create_jwt_token(user)
+    return {
+        "message": "Login successful",
+        "user_id": str(user.id),
+        "is_admin": user.is_admin,
+        "token": token
+    }
 
 @router.post("/logout")
-def logout():
-    # For JWT, logout is handled client-side by deleting the token.
-    # For session-based, you would invalidate the session here.
+def logout(token: str = Body(..., embed=True)):
+    # Add the token to the blacklist
+    jwt_blacklist.add(token)
     return {"message": "Logout successful"}
+
+def is_token_blacklisted(token: str) -> bool:
+    return token in jwt_blacklist
 
 @router.post("/users", response_model=UserRead)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):

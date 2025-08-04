@@ -70,6 +70,23 @@ class User(Base):
         """Verifies a password against the stored hash."""
         return verify_password(password, self.hashed_password)
 
+    @property
+    def is_admin(self) -> bool:
+        """
+        Returns True if the user has an 'admin' role in any organisation.
+        """
+        for assoc in self.user_organisations:
+            if assoc.role == UserRole.admin:
+                return True
+        return False
+
+    @property
+    def roles(self):
+        """
+        Returns a list of roles for the user across all organisations.
+        """
+        return [assoc.role.value for assoc in self.user_organisations]
+
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username}, email={self.email})>"
 
