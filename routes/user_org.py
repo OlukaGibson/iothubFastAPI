@@ -1,12 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from controllers.user_org import UserController, OrganisationController, get_db
 from schemas.user_org import UserCreate, UserRead, OrganisationCreate, OrganisationRead, OrganisationUpdate, UserUpdate
 from utils.error_codes import ResponseModel
+from utils.security import verify_password, get_password_hash
 import uuid
 from typing import List
 
 router = APIRouter()
+
+@router.post("/login")
+def login(
+    email: str = Body(..., embed=True),
+    password: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    from models.user_org import User
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.verify_password(password):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    # Here you would generate and return a JWT or session token
+    # For demo, just return user info
+    return {"message": "Login successful", "user_id": str(user.id), "token": user.token}
+
+@router.post("/logout")
+def logout():
+    # For JWT, logout is handled client-side by deleting the token.
+    # For session-based, you would invalidate the session here.
+    return {"message": "Logout successful"}
 
 @router.post("/users", response_model=UserRead)
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
