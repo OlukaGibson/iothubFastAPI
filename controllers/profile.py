@@ -34,7 +34,26 @@ class ProfileController:
         db.add(new_profile)
         db.commit()
         db.refresh(new_profile)
-        return new_profile
+        
+        # Convert back to proper format for response
+        response_fields = {f'field{i}': getattr(new_profile, f'field{i}') for i in range(1, 16) if getattr(new_profile, f'field{i}')}
+        response_configs = {f'config{i}': getattr(new_profile, f'config{i}') for i in range(1, 11) if getattr(new_profile, f'config{i}')}
+        response_metadata = {}
+        for i in range(1, 16):
+            val = getattr(new_profile, f'metadata{i}', None)
+            if val is not None:
+                response_metadata[f'metadata{i}'] = val
+        
+        return ProfileRead(
+            id=new_profile.id,
+            organisation_id=new_profile.organisation_id,
+            name=new_profile.name,
+            description=new_profile.description,
+            created_at=new_profile.created_at,
+            fields=response_fields,
+            configs=response_configs,
+            metadata=response_metadata
+        )
 
     @staticmethod
     def get_profiles(db: Session, organisation_id: uuid.UUID) -> List[ProfileWithDevices]:
@@ -81,7 +100,7 @@ class ProfileController:
                         config_values[f'config{i}'] = val
             device_list.append(DeviceConfigSummary(
                 name=device.name,
-                deviceID=device.deviceID,
+                deviceID=str(device.deviceID),
                 recent_config=config_values
             ))
         fields = {f'field{i}': getattr(profile, f'field{i}') for i in range(1, 16) if getattr(profile, f'field{i}')}
