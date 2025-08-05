@@ -186,3 +186,16 @@ class FirmwareController:
         file_data = blob.download_as_bytes()
         file_size = blob.size
         return file_data, file_size, blob_path
+
+    @staticmethod
+    def update_firmware_type(
+        db: Session,
+        organisation_id: uuid.UUID,
+        firmware_id: uuid.UUID,
+        firmware_type: FirmwareType
+    ) -> Firmware:
+        firmware = FirmwareController.get_firmware_by_id(db, organisation_id, firmware_id)
+        firmware.firmware_type = firmware_type
+        db.commit()
+        db.refresh(firmware)
+        return firmware

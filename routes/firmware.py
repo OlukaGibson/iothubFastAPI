@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, Response
 from sqlalchemy.orm import Session
 from controllers.firmware import FirmwareController
-from schemas.firmware import FirmwareUpload, FirmwareRead
+from schemas.firmware import FirmwareUpload, FirmwareRead, FirmwareUpdate
 from utils.security import get_current_user
 from utils.database_config import get_db
 from models.firmware import Firmware
@@ -117,3 +117,21 @@ def download_firmware_file(
             "Accept-Ranges": "bytes"
         }
     )
+
+@router.patch("/firmware/{firmware_id}", response_model=FirmwareRead)
+def update_firmware_type(
+    firmware_id: str,
+    firmware_update: FirmwareUpdate,
+    db: Session = Depends(get_db),
+    organisation_id: str = Depends(get_organisation_id_from_user)
+):
+    try:
+        firmware_uuid = uuid.UUID(firmware_id)
+        organisation_uuid = uuid.UUID(str(organisation_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid firmware_id or organisation_id format. Must be UUID.")
+    
+    firmware = FirmwareController.update_firmware_type(
+        db, organisation_uuid, firmware_uuid, firmware_update.firmware_type
+    )
+    return firmware

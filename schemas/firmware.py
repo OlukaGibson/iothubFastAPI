@@ -48,3 +48,6 @@ class FirmwareDownloadRequest(BaseModel):
     firmware_version: str
     file_type: str  # "bin", "hex", or "bootloader"
 
+class FirmwareUpdate(BaseModel):
+    firmware_type: FirmwareType
+
