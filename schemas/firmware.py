@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from uuid import UUID
 import enum
+from datetime import datetime
 
 class FirmwareType(str, enum.Enum):
     stable = "stable"
@@ -33,6 +34,8 @@ class FirmwareResponse(FirmwareBase):
     firmware_string: str
     firmware_string_hex: Optional[str] = None
     firmware_string_bootloader: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

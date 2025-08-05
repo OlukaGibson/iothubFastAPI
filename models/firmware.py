@@ -34,7 +34,7 @@ class Firmware(base):
     change9 = Column(String(255), default=None)
     change10 = Column(String(255), default=None)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Optional: relationship to Organisation
     # organisation = relationship("Organisation", back_populates="firmwares")
