@@ -143,11 +143,4 @@ class OrganisationController:
         db.commit()
         db.refresh(org)
         return org
-        #     raise HTTPException(status_code=404, detail=ResponseMessages.ORG_NOT_FOUND.value)
-        # for key, value in org_update.dict(exclude_unset=True).items():
-        #     if value is not None:
-        #         setattr(org, key, value)
-        # db.commit()
-        # db.refresh(org)
-        # return org
 
