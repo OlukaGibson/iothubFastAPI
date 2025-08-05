@@ -100,29 +100,26 @@ class DeviceController:
         previousFirmwareVersion = previousFirmware.firmware_version if previousFirmware else None
         targetFirmwareVersion = targetFirmware.firmware_version if targetFirmware else None
         deviceProfile = db.query(Profiles).filter_by(id=device.profile).first()
+        
+        # Get field name mappings from profile
+        field_names = {}
+        config_names = {}
+        metadata_names = {}
+        
         if deviceProfile:
-            profile_dict = {
-                'id': deviceProfile.id,
-                'name': deviceProfile.name,
-                'description': deviceProfile.description,
-                'created_at': deviceProfile.created_at,
-                'fields': {},
-                'configs': {},
-                'metadata': {}
-            }
             for i in range(1, 16):
-                val = getattr(deviceProfile, f'field{i}', None)
-                if val is not None:
-                    profile_dict['fields'][f'field{i}'] = val
-                mval = getattr(deviceProfile, f'metadata{i}', None)
-                if mval is not None:
-                    profile_dict['metadata'][f'metadata{i}'] = mval
+                field_val = getattr(deviceProfile, f'field{i}', None)
+                if field_val:
+                    field_names[f'field{i}'] = field_val
+                metadata_val = getattr(deviceProfile, f'metadata{i}', None)
+                if metadata_val:
+                    metadata_names[f'metadata{i}'] = metadata_val
+            
             for i in range(1, 11):
-                cval = getattr(deviceProfile, f'config{i}', None)
-                if cval is not None:
-                    profile_dict['configs'][f'config{i}'] = cval
-        else:
-            profile_dict = None
+                config_val = getattr(deviceProfile, f'config{i}', None)
+                if config_val:
+                    config_names[f'config{i}'] = config_val
+        
         device_data = db.query(DeviceData).filter_by(deviceID=deviceID).order_by(DeviceData.created_at.desc()).limit(100).all()
         config_data = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).limit(100).all()
         meta_data = db.query(MetadataValues).filter_by(deviceID=deviceID).order_by(MetadataValues.created_at.desc()).limit(100).all()
@@ -172,10 +169,13 @@ class DeviceController:
             'previousFirmwareVersion': previousFirmwareVersion,
             'networkID': device.networkID,
             'fileDownloadState': device.fileDownloadState,
+            'firmwareDownloadState': device.firmwareDownloadState,
             'device_data': device_data_list,
             'config_data': config_data_list,
             'meta_data': meta_data_list,
-            'profile': profile_dict
+            'field_names': field_names,
+            'config_names': config_names,
+            'metadata_names': metadata_names
         }
         return device_dict
 
@@ -221,6 +221,28 @@ class DeviceController:
             return {'message': 'Device not found!'}, 404
         try:
             profile = db.query(Profiles).filter_by(id=device.profile).first()
+            latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
+            device_details = {
+                'name': device.name,
+                'deviceID': device.deviceID,
+                'networkID': device.networkID,
+                'writekey': device.writekey,
+                'readkey': device.readkey,
+                'configs': {}
+            }
+            if profile and latest_config:
+                for i in range(1, 11):
+                    config_name = getattr(profile, f'config{i}', None)
+                    if config_name:
+                        config_value = getattr(latest_config, f'config{i}', None)
+                        device_details['configs'][config_name] = config_value
+            return device_details
+        # except Exception as e:
+        #     return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
+        #                 device_details['configs'][config_name] = config_value
+        #     return device_details
+        except Exception as e:
+            return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
             latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
             device_details = {
                 'name': device.name,

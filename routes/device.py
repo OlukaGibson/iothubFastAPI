@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from controllers.device import DeviceController
-from schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse
+from schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceDetailResponse
 from utils.security import get_current_user
 from utils.database_config import get_db
 import uuid
@@ -62,14 +62,16 @@ def get_devices(
     devices = DeviceController.get_devices(db, organisation_id)
     return [sanitize_device_response(device) for device in devices]
 
-@router.get("/device/{deviceID}", response_model=DeviceResponse)
+@router.get("/device/{deviceID}", response_model=DeviceDetailResponse)
 def get_device(
     deviceID: int,
     db: Session = Depends(get_db),
     organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
 ):
     result = DeviceController.get_device(db, organisation_id, deviceID)
-    return sanitize_device_response(result)
+    if isinstance(result, tuple):  # Error case
+        raise HTTPException(status_code=result[1], detail=result[0]['message'])
+    return result
 
 @router.put("/device/{deviceID}", response_model=DeviceResponse)
 def edit_device(
