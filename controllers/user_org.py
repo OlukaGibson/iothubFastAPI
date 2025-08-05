@@ -2,18 +2,11 @@ from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 from models.user_org import User, Organisation, UserOrganisation, UserRole
 from schemas.user_org import UserCreate, UserRead, OrganisationCreate, OrganisationRead, OrganisationUpdate, UserUpdate
-from utils.database_config import SessionLocal
+from utils.database_config import get_db
 from utils.security import get_password_hash
 from utils.error_codes import ErrorCodes, ResponseMessages
 import uuid
 import secrets
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 class UserController:
     @staticmethod
@@ -150,4 +143,11 @@ class OrganisationController:
         db.commit()
         db.refresh(org)
         return org
+        #     raise HTTPException(status_code=404, detail=ResponseMessages.ORG_NOT_FOUND.value)
+        # for key, value in org_update.dict(exclude_unset=True).items():
+        #     if value is not None:
+        #         setattr(org, key, value)
+        # db.commit()
+        # db.refresh(org)
+        # return org
 
