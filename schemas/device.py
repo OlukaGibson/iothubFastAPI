@@ -44,6 +44,7 @@ class DeviceDetailResponse(BaseModel):
     writekey: str
     deviceID: int
     profile: UUID
+    profile_name: Optional[str] = None
     currentFirmwareVersion: Optional[str] = None
     targetFirmwareVersion: Optional[str] = None
     previousFirmwareVersion: Optional[str] = None

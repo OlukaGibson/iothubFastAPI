@@ -164,6 +164,7 @@ class DeviceController:
             'writekey': device.writekey,
             'deviceID': device.deviceID,
             'profile': device.profile,
+            'profile_name': deviceProfile.name if deviceProfile else None,
             'currentFirmwareVersion': currentFirmwareVersion,
             'targetFirmwareVersion': targetFirmwareVersion,
             'previousFirmwareVersion': previousFirmwareVersion,
