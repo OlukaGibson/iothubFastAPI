@@ -236,33 +236,8 @@ class DeviceController:
                     config_name = getattr(profile, f'config{i}', None)
                     if config_name:
                         config_value = getattr(latest_config, f'config{i}', None)
-                        device_details['configs'][config_name] = config_value
+                        device_details['configs'][f'config{i}'] = config_value
             return device_details
-        # except Exception as e:
-        #     return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
-        #                 device_details['configs'][config_name] = config_value
-        #     return device_details
         except Exception as e:
             return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
-            latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
-            device_details = {
-                'name': device.name,
-                'deviceID': device.deviceID,
-                'networkID': device.networkID,
-                'writekey': device.writekey,
-                'readkey': device.readkey,
-                'configs': {}
-            }
-            if profile and latest_config:
-                for i in range(1, 11):
-                    config_name = getattr(profile, f'config{i}', None)
-                    if config_name:
-                        config_value = getattr(latest_config, f'config{i}', None)
-                        device_details['configs'][config_name] = config_value
-            return device_details
-        # except Exception as e:
-        #     return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
-        #                 device_details['configs'][config_name] = config_value
-        #     return device_details
-        except Exception as e:
-            return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
+      
