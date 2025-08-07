@@ -88,12 +88,8 @@ class ConfigValuesController:
         config_data = {}
         for i in range(1, 11):
             key = f'config{i}'
-            config_name = getattr(profile, key, None)
             new_value = configs.get(key)
-            if config_name:
-                config_data[key] = new_value if new_value is not None else (getattr(latest_config, key, None) if latest_config else None)
-            else:
-                config_data[key] = None
+            config_data[key] = new_value if new_value is not None else (getattr(latest_config, key, None) if latest_config else None)
         new_entry = ConfigValues(
             created_at=datetime.now(),
             deviceID=deviceID,
@@ -112,20 +108,15 @@ class ConfigValuesController:
                 if not device:
                     results['failed'].append({'deviceID': device_id, 'error': 'Device not found'})
                     continue
-                profile = db.query(Profiles).filter_by(id=device.profile).first()
                 latest_config = db.query(ConfigValues).filter_by(deviceID=device_id).order_by(ConfigValues.created_at.desc()).first()
                 configs = {}
                 for i in range(1, 11):
                     key = f'config{i}'
-                    profile_config_name = getattr(profile, key, None)
-                    if profile_config_name:
-                        new_value = config_values.get(key)
-                        if new_value == "":
-                            configs[key] = getattr(latest_config, key, None) if latest_config else None
-                        else:
-                            configs[key] = new_value
+                    new_value = config_values.get(key)
+                    if new_value == "":
+                        configs[key] = getattr(latest_config, key, None) if latest_config else None
                     else:
-                        configs[key] = None
+                        configs[key] = new_value
                 new_config = ConfigValues(
                     created_at=datetime.now(),
                     deviceID=device_id,
@@ -143,10 +134,19 @@ class ConfigValuesController:
         device = db.query(Devices).filter_by(deviceID=deviceID).first()
         if not device:
             raise HTTPException(status_code=404, detail="Device not found!")
-        profile = db.query(Profiles).filter_by(id=device.profile).first()
         config_data = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).first()
         if not config_data:
             raise HTTPException(status_code=404, detail="No config data found for this device!")
+        configuration = {
+            "deviceID": device.deviceID,
+            "fileDownloadState": device.fileDownloadState,
+            "configs": {}
+        }
+        for i in range(1, 11):
+            config_value = getattr(config_data, f'config{i}', None)
+            if config_value is not None:
+                configuration["configs"][f'config{i}'] = config_value
+        return configuration
         configuration = {
             "deviceID": device.deviceID,
             "fileDownloadState": device.fileDownloadState,

@@ -100,7 +100,7 @@ def update_firmware(
 @router.get("/device/network/{networkID}/selfconfig")
 def self_config(
     networkID: str,
-    db: Session = Depends(get_db),
-    organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
+    token: str,  # Accept token as a query parameter
+    db: Session = Depends(get_db)
 ):
-    return DeviceController.self_config(db, organisation_id, networkID)
+    return DeviceController.self_config(db, token, networkID)
