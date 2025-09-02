@@ -19,9 +19,16 @@ origins = [
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Create tables and default admin/org at startup
-    create_all_tables()
+    try:
+        print("Creating database tables...")
+        create_all_tables()
+        print("✅ Database initialization complete")
+    except Exception as e:
+        print(f"❌ Database initialization failed: {e}")
+        raise
     yield
     # Place for any cleanup logic if needed
+    print("Application shutting down...")
 
 app = FastAPI(
     title="IoTHub FastAPI API",

@@ -114,7 +114,9 @@ class FirmwareController:
         firmware_version: str,
         file_type: str,
         bucket_name: str = None,
-        credentials=None
+        credentials=None,
+        range_start: int = None,
+        range_end: int = None
     ):
         firmware = FirmwareController.get_firmware_by_version(db, organisation_id, firmware_version)
         if file_type == "bin":
@@ -138,9 +140,28 @@ class FirmwareController:
         bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
         blob = bucket.blob(blob_path)
         blob.reload()
-        file_data = blob.download_as_bytes()
+        
         file_size = blob.size
-        return file_data, file_size, blob_path
+        
+        # Handle range requests
+        if range_start is not None or range_end is not None:
+            # Validate range
+            if range_start is None:
+                range_start = 0
+            if range_end is None:
+                range_end = file_size - 1
+            
+            # Ensure range is valid
+            if range_start < 0 or range_end >= file_size or range_start > range_end:
+                raise HTTPException(status_code=416, detail=f"Range not satisfiable. File size: {file_size}")
+            
+            # Download the specified range
+            file_data = blob.download_as_bytes(start=range_start, end=range_end + 1)
+            return file_data, file_size, blob_path, range_start, range_end
+        else:
+            # Download entire file
+            file_data = blob.download_as_bytes()
+            return file_data, file_size, blob_path, None, None
 
     @staticmethod
     def get_firmware_by_id(db: Session, organisation_id: uuid.UUID, firmware_id: uuid.UUID) -> Firmware:
@@ -159,7 +180,9 @@ class FirmwareController:
         firmware_id: uuid.UUID,
         file_type: str,
         bucket_name: str = None,
-        credentials=None
+        credentials=None,
+        range_start: int = None,
+        range_end: int = None
     ):
         firmware = FirmwareController.get_firmware_by_id(db, organisation_id, firmware_id)
         if file_type == "bin":
@@ -183,9 +206,28 @@ class FirmwareController:
         bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
         blob = bucket.blob(blob_path)
         blob.reload()
-        file_data = blob.download_as_bytes()
+        
         file_size = blob.size
-        return file_data, file_size, blob_path
+        
+        # Handle range requests
+        if range_start is not None or range_end is not None:
+            # Validate range
+            if range_start is None:
+                range_start = 0
+            if range_end is None:
+                range_end = file_size - 1
+            
+            # Ensure range is valid
+            if range_start < 0 or range_end >= file_size or range_start > range_end:
+                raise HTTPException(status_code=416, detail=f"Range not satisfiable. File size: {file_size}")
+            
+            # Download the specified range
+            file_data = blob.download_as_bytes(start=range_start, end=range_end + 1)
+            return file_data, file_size, blob_path, range_start, range_end
+        else:
+            # Download entire file
+            file_data = blob.download_as_bytes()
+            return file_data, file_size, blob_path, None, None
 
     @staticmethod
     def update_firmware_type(

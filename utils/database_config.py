@@ -12,7 +12,22 @@ load_dotenv()
 # Set your database URL here (default to SQLite if not set)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./iot_database.db")
 
-engine = create_engine(DATABASE_URL)
+# Configure engine with connection pooling and timeout handling
+if DATABASE_URL.startswith("postgresql"):
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        connect_args={
+            "connect_timeout": 10,
+            "application_name": "iothub_fastapi"
+        }
+    )
+else:
+    engine = create_engine(DATABASE_URL)
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def create_all_tables():

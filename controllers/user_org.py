@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from models.user_org import User, Organisation, UserOrganisation, UserRole
 from schemas.user_org import UserCreate, UserRead, OrganisationCreate, OrganisationRead, OrganisationUpdate, UserUpdate
 from utils.database_config import get_db
-from utils.security import get_password_hash
 from utils.error_codes import ErrorCodes, ResponseMessages
 import uuid
 import secrets

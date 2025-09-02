@@ -3,7 +3,6 @@ from sqlalchemy.orm import Session
 from controllers.user_org import UserController, OrganisationController, get_db
 from schemas.user_org import UserCreate, UserRead, OrganisationCreate, OrganisationRead, OrganisationUpdate, UserUpdate
 from utils.error_codes import ResponseModel
-from utils.security import verify_password, get_password_hash
 import uuid
 from typing import List
 import jwt

@@ -4,8 +4,10 @@ from utils.base import Base  # <-- changed import
 import uuid
 import enum
 from sqlalchemy.dialects.postgresql import UUID
-from utils.security import get_password_hash
-from utils.security import verify_password
+from passlib.context import CryptContext
+
+# Password hashing context
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Define roles as an Enum
 class UserRole(enum.Enum):
@@ -64,11 +66,11 @@ class User(Base):
 
     def set_password(self, password: str):
         """Hashes and sets the user's password."""
-        self.hashed_password = get_password_hash(password)
+        self.hashed_password = pwd_context.hash(password)
 
     def verify_password(self, password: str) -> bool:
         """Verifies a password against the stored hash."""
-        return verify_password(password, self.hashed_password)
+        return pwd_context.verify(password, self.hashed_password)
 
     @property
     def is_admin(self) -> bool:
