@@ -1,5 +1,6 @@
 import random
 import string
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from models.device import Devices
 from models.firmware import Firmware
@@ -202,10 +203,10 @@ class DeviceController:
     def update_firmware(db: Session, organisation_id, deviceID, firmwareID, firmwareVersion):
         device = db.query(Devices).filter_by(deviceID=deviceID).first()
         if not device:
-            return {'message': 'Device not found!'}, 404
+            raise HTTPException(status_code=404, detail='Device not found!')
         firmware = db.query(Firmware).filter_by(id=firmwareID, firmware_version=firmwareVersion).first()
         if not firmware:
-            return {'message': 'Firmware not found or version mismatch!'}, 404
+            raise HTTPException(status_code=404, detail='Firmware not found or version mismatch!')
         device.targetFirmwareVersion = firmwareID
         if device.currentFirmwareVersion == firmwareID:
             device.firmwareDownloadState = 'updated'
@@ -213,7 +214,7 @@ class DeviceController:
             device.firmwareDownloadState = 'pending'
         db.commit()
         db.refresh(device)
-        return {'message': 'Device firmware update initiated successfully!'}
+        return device
 
     @staticmethod
     def self_config(db: Session, organisation_id, networkID):
