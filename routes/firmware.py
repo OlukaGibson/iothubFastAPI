@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, R
 from sqlalchemy.orm import Session
 from controllers.firmware import FirmwareController
 from schemas.firmware import FirmwareUpload, FirmwareRead, FirmwareUpdate
-from utils.security import get_current_user
+from utils.security import get_current_user, get_user_with_org_context
 from utils.database_config import get_db
 from models.firmware import Firmware
 import os
@@ -11,11 +11,17 @@ import re
 
 router = APIRouter()
 
-def get_organisation_id_from_user(user=Depends(get_current_user)):
-    # Assumes user.organisations[0].id is the current org; adjust as needed
-    if not user.organisations:
-        raise HTTPException(status_code=403, detail="User not associated with any organisation.")
-    return user.organisations[0].id
+def get_organisation_id_from_token(user_data):
+    """Get organization ID from JWT token organization context."""
+    if hasattr(user_data, 'token_primary_org_id'):
+        primary_org_id = user_data.token_primary_org_id
+    else:
+        # Fallback: try to get from dict format (for compatibility)
+        primary_org_id = user_data.get('primary_org_id') if hasattr(user_data, 'get') else None
+    
+    if not primary_org_id:
+        raise HTTPException(status_code=403, detail="No primary organization found in token.")
+    return uuid.UUID(str(primary_org_id))
 
 def parse_range_header(range_header: str, file_size: int):
     """Parse HTTP Range header and return start and end byte positions."""
@@ -74,8 +80,10 @@ async def upload_firmware(
     firmware_file: UploadFile = File(...),
     firmware_bootloader: UploadFile = File(None),
     db: Session = Depends(get_db),
-    organisation_id: str = Depends(get_organisation_id_from_user)
+    user_data = Depends(get_user_with_org_context)
 ):
+    """Upload firmware. Requires organization token - firmware will be attached to the organization from the JWT token."""
+    organisation_id = get_organisation_id_from_token(user_data)
     firmware_data = {
         "firmware_version": firmware_version,
         "firmware_type": firmware_type,
@@ -101,23 +109,27 @@ async def upload_firmware(
 @router.get("/firmware", response_model=list[FirmwareRead])
 def list_firmwares(
     db: Session = Depends(get_db),
-    organisation_id: str = Depends(get_organisation_id_from_user)
+    user_data = Depends(get_user_with_org_context)
 ):
+    """List firmwares in the user's organization. Requires organization token."""
+    organisation_id = get_organisation_id_from_token(user_data)
     return FirmwareController.list_firmwares(db, organisation_id)
 
 @router.get("/firmware/{firmware_id}", response_model=FirmwareRead)
 def get_firmware(
     firmware_id: str,
     db: Session = Depends(get_db),
-    organisation_id: str = Depends(get_organisation_id_from_user)
+    user_data = Depends(get_user_with_org_context)
 ):
+    """Get specific firmware. Requires organization token - ensures firmware belongs to user's organization."""
+    organisation_id = get_organisation_id_from_token(user_data)
     try:
         firmware_uuid = uuid.UUID(firmware_id)
-        organisation_uuid = uuid.UUID(str(organisation_id))
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid firmware_id or organisation_id format. Must be UUID.")
+        raise HTTPException(status_code=400, detail="Invalid firmware_id format. Must be UUID.")
+    
     firmware = db.query(Firmware).filter_by(
-        organisation_id=organisation_uuid,
+        organisation_id=organisation_id,
         id=firmware_uuid
     ).first()
     if not firmware:
@@ -130,8 +142,9 @@ def download_firmware_file(
     firmware_id: str,
     file_type: str,
     db: Session = Depends(get_db),
-    organisation_id: str = Depends(get_organisation_id_from_user)
+    user_data: dict = Depends(get_user_with_org_context)
 ):
+    organisation_id = get_organisation_id_from_token(user_data)
     try:
         firmware_uuid = uuid.UUID(firmware_id)
         organisation_uuid = uuid.UUID(str(organisation_id))
@@ -210,9 +223,10 @@ def head_firmware_file(
     firmware_id: str,
     file_type: str,
     db: Session = Depends(get_db),
-    organisation_id: str = Depends(get_organisation_id_from_user)
+    user_data: dict = Depends(get_user_with_org_context)
 ):
     """HEAD endpoint to get file metadata without downloading the content."""
+    organisation_id = get_organisation_id_from_token(user_data)
     try:
         firmware_uuid = uuid.UUID(firmware_id)
         organisation_uuid = uuid.UUID(str(organisation_id))
@@ -263,13 +277,107 @@ def head_firmware_file(
         }
     )
 
+@router.get("/firmware/{org_token}/{firmware_id}/download/{file_type}")
+def get_firmware_file_with_org(
+    request: Request,
+    org_token: str,
+    firmware_id: str,
+    file_type: str,
+    db: Session = Depends(get_db)
+):
+    """GET endpoint to download firmware file with Range header support. Uses org_token to lookup organization from database."""
+    
+    # Look up organization by token from database
+    from controllers.user_org import OrganisationController
+    organisation_id = OrganisationController.get_organisation_id_by_token(db, org_token)
+    if not organisation_id:
+        raise HTTPException(status_code=404, detail="Invalid organization token.")
+    
+    try:
+        firmware_uuid = uuid.UUID(firmware_id)
+        organisation_uuid = uuid.UUID(str(organisation_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid firmware_id or organisation_id format. Must be UUID.")
+    
+    credentials = None  # Set your GCP credentials if needed
+    bucket_name = os.getenv("BUCKET_NAME")
+    
+    # First, get file size to parse range header
+    file_data, file_size, blob_path, filename, content_type = FirmwareController.download_firmware_file_by_id(
+        db, organisation_uuid, firmware_uuid, file_type, bucket_name, credentials
+    )
+    
+    if not blob_path:
+        raise HTTPException(status_code=404, detail="Requested firmware file not found.")
+    
+    # Parse Range header if present
+    range_header = request.headers.get("range")
+    range_start, range_end = None, None
+    
+    if range_header:
+        range_start, range_end = parse_range_header(range_header, file_size)
+        
+        # Handle range not satisfiable
+        if range_start == -1 and range_end == -1:
+            return Response(
+                status_code=416,
+                headers={
+                    "Content-Range": f"bytes */{file_size}",
+                    "Accept-Ranges": "bytes"
+                }
+            )
+        
+        # If valid range, re-download with range
+        if range_start is not None and range_end is not None:
+            file_data, file_size, blob_path, range_start, range_end = FirmwareController.download_firmware_file_by_id(
+                db, organisation_uuid, firmware_uuid, file_type, bucket_name, credentials, range_start, range_end
+            )
+    
+    # Get firmware version for filename
+    from models.firmware import Firmware
+    firmware = db.query(Firmware).filter_by(
+        organisation_id=organisation_uuid,
+        id=firmware_uuid
+    ).first()
+    firmware_version = firmware.firmware_version if firmware else firmware_id
+    final_filename = f"{firmware_version}.{file_type if file_type != 'bootloader' else 'hex'}"
+    
+    # Prepare response headers
+    headers = {
+        "Content-Disposition": f"attachment; filename={final_filename}",
+        "Accept-Ranges": "bytes",
+        "Cache-Control": "no-cache"
+    }
+    
+    # Set appropriate status code and headers based on range request
+    if range_start is not None and range_end is not None:
+        # Partial content response (206)
+        status_code = 206
+        content_length = range_end - range_start + 1
+        headers.update({
+            "Content-Length": str(content_length),
+            "Content-Range": f"bytes {range_start}-{range_end}/{file_size}"
+        })
+    else:
+        # Full content response (200)
+        status_code = 200
+        headers["Content-Length"] = str(len(file_data))
+    
+    return Response(
+        content=file_data,
+        status_code=status_code,
+        media_type="application/octet-stream",
+        headers=headers
+    )
+
 @router.patch("/firmware/{firmware_id}", response_model=FirmwareRead)
 def update_firmware_type(
     firmware_id: str,
     firmware_update: FirmwareUpdate,
     db: Session = Depends(get_db),
-    organisation_id: str = Depends(get_organisation_id_from_user)
+    user_data: dict = Depends(get_user_with_org_context)
 ):
+    organisation_id = get_organisation_id_from_token(user_data)
     try:
         firmware_uuid = uuid.UUID(firmware_id)
         organisation_uuid = uuid.UUID(str(organisation_id))

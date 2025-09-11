@@ -143,3 +143,10 @@ class OrganisationController:
         db.refresh(org)
         return org
 
+    @staticmethod
+    def get_organisation_id_by_token(db: Session, org_token: str) -> str:
+        """Get organisation ID by token from database."""
+        org = db.query(Organisation).filter(Organisation.token == org_token, Organisation.is_active == True).first()
+        if not org:
+            return None
+        return str(org.id)

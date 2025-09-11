@@ -35,6 +35,13 @@ class DeviceController:
         if db.query(Devices).filter_by(deviceID=deviceID).first():
             raise HTTPException(status_code=400, detail=f"DeviceID '{deviceID}' already exists.")
 
+        # Validate that the profile belongs to the user's organization
+        profile = db.query(Profiles).filter_by(id=device_data.profile).first()
+        if not profile:
+            raise HTTPException(status_code=404, detail="Profile not found.")
+        if str(profile.organisation_id) != str(organisation_id):
+            raise HTTPException(status_code=403, detail="Profile does not belong to your organization.")
+
         new_device = Devices(
             name=device_data.name,
             readkey=readkey,
@@ -56,7 +63,8 @@ class DeviceController:
 
     @staticmethod
     def get_devices(db: Session, organisation_id):
-        devices = db.query(Devices).all()
+        # Get devices that belong to profiles in the user's organization
+        devices = db.query(Devices).join(Profiles).filter(Profiles.organisation_id == organisation_id).all()
         devices_list = []
         for device in devices:
             currentFirmware = db.query(Firmware).filter_by(id=device.currentFirmwareVersion).first()
@@ -91,7 +99,10 @@ class DeviceController:
 
     @staticmethod
     def get_device(db: Session, organisation_id, deviceID):
-        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        device = db.query(Devices).join(Profiles).filter(
+            Devices.deviceID == deviceID,
+            Profiles.organisation_id == organisation_id
+        ).first()
         if not device:
             return {'message': 'Device not found!'}, 404
         currentFirmware = db.query(Firmware).filter_by(id=device.currentFirmwareVersion).first()
@@ -183,7 +194,10 @@ class DeviceController:
 
     @staticmethod
     def update_device(db: Session, organisation_id, deviceID, device_update):
-        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        device = db.query(Devices).join(Profiles).filter(
+            Devices.deviceID == deviceID,
+            Profiles.organisation_id == organisation_id
+        ).first()
         if not device:
             return {'message': 'Device not found!'}, 404
         # Update fields
@@ -201,7 +215,10 @@ class DeviceController:
 
     @staticmethod
     def update_firmware(db: Session, organisation_id, deviceID, firmwareID, firmwareVersion):
-        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        device = db.query(Devices).join(Profiles).filter(
+            Devices.deviceID == deviceID,
+            Profiles.organisation_id == organisation_id
+        ).first()
         if not device:
             raise HTTPException(status_code=404, detail='Device not found!')
         firmware = db.query(Firmware).filter_by(id=firmwareID, firmware_version=firmwareVersion).first()
@@ -217,8 +234,11 @@ class DeviceController:
         return device
 
     @staticmethod
-    def self_config(db: Session, organisation_id, networkID):
-        device = db.query(Devices).filter_by(networkID=networkID).first()
+    def self_config(db: Session, organisation_id, networkID, token):
+        device = db.query(Devices).join(Profiles).filter(
+            Devices.networkID == networkID,
+            Profiles.organisation_id == organisation_id
+        ).first()
         if not device:
             return {'message': 'Device not found!'}, 404
         try:

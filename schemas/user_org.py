@@ -77,3 +77,34 @@ class UserRead(UserBase):
     created_at: Optional[datetime.datetime]
     updated_at: Optional[datetime.datetime]
     organisations: Optional[List[OrganisationRead]] = None
+
+class OrganisationMembership(BaseModel):
+    """User's membership in an organization with role information."""
+    org_id: uuid.UUID
+    org_name: str
+    role: str
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+class TokenPair(BaseModel):
+    """JWT token pair with basic and organization tokens."""
+    basic_token: str
+    org_token: str
+
+    class Config:
+        from_attributes = True
+
+class LoginResponse(BaseModel):
+    """Enhanced login response with both token types and organization info."""
+    message: str
+    user_id: uuid.UUID
+    username: str
+    email: str
+    is_admin: bool
+    tokens: TokenPair
+    organizations: List[OrganisationMembership]
+
+    class Config:
+        from_attributes = True

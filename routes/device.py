@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from controllers.device import DeviceController
 from schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceDetailResponse
-from utils.security import get_current_user
+from utils.security import get_user_with_org_context
 from utils.database_config import get_db
 import uuid
 from typing import Optional
@@ -40,25 +40,38 @@ def sanitize_device_response(device_data):
     
     return data
 
-def get_organisation_id_from_user(user=Depends(get_current_user)):
-    if not user.organisations:
-        raise HTTPException(status_code=403, detail="User not associated with any organisation.")
-    return user.organisations[0].id
+def get_organisation_id_from_token(user_data) -> uuid.UUID:
+    """Extract organisation ID from JWT token data stored in User object"""
+    # Check if user_data is a User object with JWT token attributes
+    if hasattr(user_data, 'token_primary_org_id'):
+        primary_org_id = user_data.token_primary_org_id
+    else:
+        # Fallback: try to get from dict format (for compatibility)
+        primary_org_id = user_data.get('primary_org_id') if hasattr(user_data, 'get') else None
+    
+    if not primary_org_id:
+        raise HTTPException(status_code=403, detail="No organization context in token.")
+    try:
+        return uuid.UUID(str(primary_org_id))
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=403, detail="Invalid organization ID in token.")
 
 @router.post("/device", response_model=DeviceResponse)
 def add_device(
     device: DeviceCreate = Body(...),
     db: Session = Depends(get_db),
-    organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
+    user_data = Depends(get_user_with_org_context)
 ):
+    organisation_id = get_organisation_id_from_token(user_data)
     result = DeviceController.create_device(db, organisation_id, device)
     return sanitize_device_response(result)
 
 @router.get("/device", response_model=list[DeviceResponse])
 def get_devices(
     db: Session = Depends(get_db),
-    organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
+    user_data = Depends(get_user_with_org_context)
 ):
+    organisation_id = get_organisation_id_from_token(user_data)
     devices = DeviceController.get_devices(db, organisation_id)
     return [sanitize_device_response(device) for device in devices]
 
@@ -66,41 +79,49 @@ def get_devices(
 def get_device(
     deviceID: int,
     db: Session = Depends(get_db),
-    organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
+    user_data = Depends(get_user_with_org_context)
 ):
+    organisation_id = get_organisation_id_from_token(user_data)
     result = DeviceController.get_device(db, organisation_id, deviceID)
     if isinstance(result, tuple):  # Error case
         raise HTTPException(status_code=result[1], detail=result[0]['message'])
     return result
 
-@router.put("/device/{deviceID}", response_model=DeviceResponse)
-def edit_device(
-    deviceID: int,
-    device_update: DeviceUpdate = Body(...),
-    db: Session = Depends(get_db),
-    organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
-):
-    result = DeviceController.update_device(db, organisation_id, deviceID, device_update)
-    return sanitize_device_response(result)
+# @router.put("/device/{deviceID}", response_model=DeviceResponse)
+# def edit_device(
+#     deviceID: int,
+#     device_update: DeviceUpdate = Body(...),
+#     db: Session = Depends(get_db),
+#     organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
+# ):
+#     result = DeviceController.update_device(db, organisation_id, deviceID, device_update)
+#     return sanitize_device_response(result)
 
-@router.post("/device/{deviceID}/update_firmware", response_model=DeviceResponse)
-def update_firmware(
-    deviceID: int,
-    payload: dict = Body(...),
-    db: Session = Depends(get_db),
-    organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
-):
-    firmwareID = payload.get('firmwareID')
-    firmwareVersion = payload.get('firmwareVersion')
-    if not firmwareID or not firmwareVersion:
-        raise HTTPException(status_code=400, detail="Firmware ID and version required")
-    result = DeviceController.update_firmware(db, organisation_id, deviceID, uuid.UUID(firmwareID), firmwareVersion)
-    return sanitize_device_response(result)
+# @router.post("/device/{deviceID}/update_firmware", response_model=DeviceResponse)
+# def update_firmware(
+#     deviceID: int,
+#     payload: dict = Body(...),
+#     db: Session = Depends(get_db),
+#     organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
+# ):
+#     firmwareID = payload.get('firmwareID')
+#     firmwareVersion = payload.get('firmwareVersion')
+#     if not firmwareID or not firmwareVersion:
+#         raise HTTPException(status_code=400, detail="Firmware ID and version required")
+#     result = DeviceController.update_firmware(db, organisation_id, deviceID, uuid.UUID(firmwareID), firmwareVersion)
+#     return sanitize_device_response(result)
 
-@router.get("/device/network/{networkID}/selfconfig")
+@router.get("/device/network/{org_token}/{networkID}/selfconfig")
 def self_config(
+    org_token: str,
     networkID: str,
     token: str,  # Accept token as a query parameter
     db: Session = Depends(get_db)
 ):
-    return DeviceController.self_config(db, token, networkID)
+    # Look up organization by token from database
+    from controllers.user_org import OrganisationController
+    organisation_id = OrganisationController.get_organisation_id_by_token(db, org_token)
+    if not organisation_id:
+        raise HTTPException(status_code=404, detail="Invalid organization token.")
+    
+    return DeviceController.self_config(db, organisation_id, networkID, token)
