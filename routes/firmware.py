@@ -218,64 +218,64 @@ def download_firmware_file(
         headers=headers
     )
 
-@router.head("/firmware/{firmware_id}/download/{file_type}")
-def head_firmware_file(
-    firmware_id: str,
-    file_type: str,
-    db: Session = Depends(get_db),
-    user_data: dict = Depends(get_user_with_org_context)
-):
-    """HEAD endpoint to get file metadata without downloading the content."""
-    organisation_id = get_organisation_id_from_token(user_data)
-    try:
-        firmware_uuid = uuid.UUID(firmware_id)
-        organisation_uuid = uuid.UUID(str(organisation_id))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid firmware_id or organisation_id format. Must be UUID.")
+# @router.head("/firmware/{firmware_id}/download/{file_type}")
+# def head_firmware_file(
+#     firmware_id: str,
+#     file_type: str,
+#     db: Session = Depends(get_db),
+#     user_data: dict = Depends(get_user_with_org_context)
+# ):
+#     """HEAD endpoint to get file metadata without downloading the content."""
+#     organisation_id = get_organisation_id_from_token(user_data)
+#     try:
+#         firmware_uuid = uuid.UUID(firmware_id)
+#         organisation_uuid = uuid.UUID(str(organisation_id))
+#     except ValueError:
+#         raise HTTPException(status_code=400, detail="Invalid firmware_id or organisation_id format. Must be UUID.")
     
-    credentials = None
-    bucket_name = os.getenv("BUCKET_NAME")
+#     credentials = None
+#     bucket_name = os.getenv("BUCKET_NAME")
     
-    # Get firmware info without downloading content
-    firmware = FirmwareController.get_firmware_by_id(db, organisation_uuid, firmware_uuid)
-    if file_type == "bin":
-        blob_path = firmware.firmware_string
-    elif file_type == "hex":
-        blob_path = firmware.firmware_string_hex
-    elif file_type == "bootloader":
-        blob_path = firmware.firmware_string_bootloader
-    else:
-        raise HTTPException(status_code=400, detail="Invalid file type requested.")
-    if not blob_path:
-        raise HTTPException(status_code=404, detail="Requested firmware file not found.")
+#     # Get firmware info without downloading content
+#     firmware = FirmwareController.get_firmware_by_id(db, organisation_uuid, firmware_uuid)
+#     if file_type == "bin":
+#         blob_path = firmware.firmware_string
+#     elif file_type == "hex":
+#         blob_path = firmware.firmware_string_hex
+#     elif file_type == "bootloader":
+#         blob_path = firmware.firmware_string_bootloader
+#     else:
+#         raise HTTPException(status_code=400, detail="Invalid file type requested.")
+#     if not blob_path:
+#         raise HTTPException(status_code=404, detail="Requested firmware file not found.")
     
-    # Get file size from Google Cloud Storage
-    from google.cloud import storage
-    from google.oauth2 import service_account
-    import json
+#     # Get file size from Google Cloud Storage
+#     from google.cloud import storage
+#     from google.oauth2 import service_account
+#     import json
     
-    if credentials is None:
-        credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-        if credentials_json:
-            credentials_dict = json.loads(credentials_json)
-            credentials = service_account.Credentials.from_service_account_info(credentials_dict)
-    storage_client = storage.Client(credentials=credentials)
-    bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
-    blob = bucket.blob(blob_path)
-    blob.reload()
-    file_size = blob.size
+#     if credentials is None:
+#         credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+#         if credentials_json:
+#             credentials_dict = json.loads(credentials_json)
+#             credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+#     storage_client = storage.Client(credentials=credentials)
+#     bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
+#     blob = bucket.blob(blob_path)
+#     blob.reload()
+#     file_size = blob.size
     
-    filename = f"{firmware.firmware_version}.{file_type if file_type != 'bootloader' else 'hex'}"
+#     filename = f"{firmware.firmware_version}.{file_type if file_type != 'bootloader' else 'hex'}"
     
-    return Response(
-        status_code=200,
-        headers={
-            "Content-Length": str(file_size),
-            "Accept-Ranges": "bytes",
-            "Content-Type": "application/octet-stream",
-            "Content-Disposition": f"attachment; filename={filename}"
-        }
-    )
+#     return Response(
+#         status_code=200,
+#         headers={
+#             "Content-Length": str(file_size),
+#             "Accept-Ranges": "bytes",
+#             "Content-Type": "application/octet-stream",
+#             "Content-Disposition": f"attachment; filename={filename}"
+#         }
+#     )
 
 @router.get("/firmware/{org_token}/{firmware_id}/download/{file_type}")
 def get_firmware_file_with_org(

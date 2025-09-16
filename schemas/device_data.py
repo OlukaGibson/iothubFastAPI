@@ -30,6 +30,7 @@ class MetadataValuesRead(MetadataValuesBase):
 
 class ConfigValuesBase(BaseModel):
     deviceID: int
+    config_updated: bool = False
     configs: Optional[Dict[str, Optional[str]]] = None
 
 class ConfigValuesCreate(ConfigValuesBase):

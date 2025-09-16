@@ -97,7 +97,20 @@ class ConfigValuesController:
         )
         db.add(new_entry)
         db.commit()
-        return new_entry
+        db.refresh(new_entry)
+        
+        # Return configuration in same format as get_config_data
+        configuration = {
+            "deviceID": device.deviceID,
+            "fileDownloadState": device.fileDownloadState,
+            "config_updated": new_entry.config_updated,
+            "configs": {}
+        }
+        for i in range(1, 11):
+            config_value = getattr(new_entry, f'config{i}', None)
+            if config_value is not None:
+                configuration["configs"][f'config{i}'] = config_value
+        return configuration
 
     @staticmethod
     def mass_edit_config_data(db: Session, device_ids: list, config_values: dict):
@@ -123,7 +136,22 @@ class ConfigValuesController:
                     **configs
                 )
                 db.add(new_config)
-                results['success'].append(device_id)
+                db.flush()  # Flush to get the new config data
+                db.refresh(new_config)
+                
+                # Create config response with config_updated field
+                device_config = {
+                    "deviceID": device.deviceID,
+                    "fileDownloadState": device.fileDownloadState,
+                    "config_updated": new_config.config_updated,
+                    "configs": {}
+                }
+                for i in range(1, 11):
+                    config_value = getattr(new_config, f'config{i}', None)
+                    if config_value is not None:
+                        device_config["configs"][f'config{i}'] = config_value
+                
+                results['success'].append(device_config)
             except Exception as e:
                 results['failed'].append({'deviceID': device_id, 'error': str(e)})
         db.commit()
@@ -140,6 +168,7 @@ class ConfigValuesController:
         configuration = {
             "deviceID": device.deviceID,
             "fileDownloadState": device.fileDownloadState,
+            "config_updated": config_data.config_updated,
             "configs": {}
         }
         for i in range(1, 11):
@@ -147,14 +176,62 @@ class ConfigValuesController:
             if config_value is not None:
                 configuration["configs"][f'config{i}'] = config_value
         return configuration
+
+    @staticmethod
+    def update_config_with_org_token(db: Session, org_token: str, deviceID: int, configs: dict = None):
+        """Update device config using org_token authentication and return latest config with config_updated=True"""
+        from controllers.user_org import OrganisationController
+        
+        # Validate org_token and get organisation_id
+        organisation_id = OrganisationController.get_organisation_id_by_token(db, org_token)
+        if not organisation_id:
+            raise HTTPException(status_code=404, detail="Invalid organization token!")
+        
+        # Get device and verify it belongs to the organization
+        device = db.query(Devices).filter_by(deviceID=deviceID).first()
+        if not device:
+            raise HTTPException(status_code=404, detail="Device not found!")
+        
+        # Get the device's profile and check if it belongs to the organization
+        profile = db.query(Profiles).filter_by(id=device.profile).first()
+        if not profile or str(profile.organisation_id) != organisation_id:
+            raise HTTPException(status_code=403, detail="Device does not belong to your organization!")
+        
+        # Get the latest config to preserve existing values
+        latest_config = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).first()
+        
+        # Prepare config data, preserving existing values if new ones aren't provided
+        config_data = {}
+        for i in range(1, 11):
+            key = f'config{i}'
+            if configs and key in configs:
+                config_data[key] = configs[key]
+            else:
+                config_data[key] = getattr(latest_config, key, None) if latest_config else None
+        
+        # Create new config entry with config_updated=True
+        new_config = ConfigValues(
+            created_at=datetime.now(),
+            deviceID=deviceID,
+            config_updated=True,  # Set to True as requested
+            **config_data
+        )
+        
+        db.add(new_config)
+        db.commit()
+        db.refresh(new_config)
+        
+        # Return the latest config in the same format as get_config_data
         configuration = {
             "deviceID": device.deviceID,
             "fileDownloadState": device.fileDownloadState,
+            "config_updated": new_config.config_updated,
             "configs": {}
         }
+        
         for i in range(1, 11):
-            config_name = getattr(profile, f'config{i}', None)
-            config_value = getattr(config_data, f'config{i}', None)
-            if config_name is not None and config_value is not None:
-                configuration["configs"][config_name] = config_value
+            config_value = getattr(new_config, f'config{i}', None)
+            if config_value is not None:
+                configuration["configs"][f'config{i}'] = config_value
+                
         return configuration

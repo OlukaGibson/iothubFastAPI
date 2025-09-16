@@ -152,6 +152,7 @@ class DeviceController:
             data_dict = {
                 'entryID': data.id,
                 'created_at': data.created_at,
+                'config_updated': data.config_updated,
             }
             for i in range(1, 11):
                 val = getattr(data, f'config{i}', None)
@@ -250,6 +251,7 @@ class DeviceController:
                 'networkID': device.networkID,
                 'writekey': device.writekey,
                 'readkey': device.readkey,
+                'config_updated': latest_config.config_updated if latest_config else False,
                 'configs': {}
             }
             if profile and latest_config:

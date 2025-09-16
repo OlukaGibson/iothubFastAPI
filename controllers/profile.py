@@ -94,6 +94,7 @@ class ProfileController:
             recent_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
             config_values = {}
             if recent_config:
+                config_values['config_updated'] = recent_config.config_updated
                 for i in range(1, 11):
                     val = getattr(recent_config, f'config{i}', None)
                     if val:

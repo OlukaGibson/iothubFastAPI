@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Union
 from uuid import UUID
 import datetime
 
@@ -24,7 +24,7 @@ class ProfileRead(ProfileBase):
 class DeviceConfigSummary(BaseModel):
     name: str
     deviceID: str
-    recent_config: Dict[str, Optional[str]]
+    recent_config: Dict[str, Union[str, bool, None]]
 
 class ProfileWithDevices(ProfileRead):
     device_count: int
