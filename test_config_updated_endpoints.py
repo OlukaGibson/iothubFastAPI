@@ -98,44 +98,47 @@ def test_config_endpoints():
     
     print()
     
-    # Test 4: POST /config/{org_token}/{deviceID}/update
-    print("4️⃣ Testing POST /config/{org_token}/{deviceID}/update")
+    # Test 4: GET /config_update
+    print("4️⃣ Testing GET /config_update")
     try:
-        payload = {
-            "config1": "org_token_value"
-        }
-        response = requests.post(f"{BASE_URL}/config/{org_token}/{device_id}/update", json=payload)
+        response = requests.get(f"{BASE_URL}/config_update", params={
+            "org_token": org_token,
+            "deviceID": device_id
+        })
         if response.status_code == 200:
             data = response.json()
             has_config_updated = "config_updated" in data
             print(f"   ✅ Status: {response.status_code}")
             print(f"   {'✅' if has_config_updated else '❌'} config_updated field: {data.get('config_updated', 'MISSING')}")
-            test_results.append(("POST /config/{org_token}/{deviceID}/update", has_config_updated))
+            test_results.append(("GET /config_update", has_config_updated))
         else:
             print(f"   ❌ Failed with status: {response.status_code}")
-            test_results.append(("POST /config/{org_token}/{deviceID}/update", False))
+            test_results.append(("GET /config_update", False))
     except Exception as e:
         print(f"   ❌ Error: {e}")
-        test_results.append(("POST /config/{org_token}/{deviceID}/update", False))
+        test_results.append(("GET /config_update", False))
     
     print()
     
-    # Test 5: GET /device/network/{org_token}/{networkID}/selfconfig
-    print("5️⃣ Testing GET /device/network/{org_token}/{networkID}/selfconfig")
+    # Test 5: GET /network/selfconfig
+    print("5️⃣ Testing GET /network/selfconfig")
     try:
-        response = requests.get(f"{BASE_URL}/device/network/{org_token}/{network_id}/selfconfig?token={device_token}")
+        response = requests.get(f"{BASE_URL}/network/selfconfig", params={
+            "org_token": org_token,
+            "networkID": network_id
+        })
         if response.status_code == 200:
             data = response.json()
             has_config_updated = "config_updated" in data
             print(f"   ✅ Status: {response.status_code}")
             print(f"   {'✅' if has_config_updated else '❌'} config_updated field: {data.get('config_updated', 'MISSING')}")
-            test_results.append(("GET /device/network/.../selfconfig", has_config_updated))
+            test_results.append(("GET /network/selfconfig", has_config_updated))
         else:
             print(f"   ❌ Failed with status: {response.status_code}")
-            test_results.append(("GET /device/network/.../selfconfig", False))
+            test_results.append(("GET /network/selfconfig", False))
     except Exception as e:
         print(f"   ❌ Error: {e}")
-        test_results.append(("GET /device/network/.../selfconfig", False))
+        test_results.append(("GET /network/selfconfig", False))
     
     print()
     print("📊 SUMMARY")

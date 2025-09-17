@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 from controllers.device import DeviceController
 from schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceDetailResponse
@@ -111,11 +111,10 @@ def get_device(
 #     result = DeviceController.update_firmware(db, organisation_id, deviceID, uuid.UUID(firmwareID), firmwareVersion)
 #     return sanitize_device_response(result)
 
-@router.get("/device/network/{org_token}/{networkID}/selfconfig")
+@router.get("/network/selfconfig")
 def self_config(
-    org_token: str,
-    networkID: str,
-    token: str,  # Accept token as a query parameter
+    org_token: str = Query(..., description="Organization token"),
+    networkID: str = Query(..., description="Network ID"),
     db: Session = Depends(get_db)
 ):
     # Look up organization by token from database
@@ -124,4 +123,4 @@ def self_config(
     if not organisation_id:
         raise HTTPException(status_code=404, detail="Invalid organization token.")
     
-    return DeviceController.self_config(db, organisation_id, networkID, token)
+    return DeviceController.self_config(db, organisation_id, networkID)

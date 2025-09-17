@@ -8,7 +8,7 @@ class Profiles(Base):
     __tablename__ = 'profiles'
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     organisation_id = Column(UUID(as_uuid=True), ForeignKey('organisations.id'), nullable=False)
-    name = Column(String(100), unique=True)
+    name = Column(String(100), unique=True) # Change this later as iy's unique per organisation
     description = Column(String(100), default=None)
     field1 = Column(String(100), default=None)
     field2 = Column(String(100), default=None)

@@ -235,3 +235,70 @@ class ConfigValuesController:
                 configuration["configs"][f'config{i}'] = config_value
                 
         return configuration
+    
+    @staticmethod
+    def get_config_update_status(db: Session, org_token: str, deviceID: int):
+        """Get config update status. Returns data if config_updated=False, just status if True."""
+        try:
+            from controllers.user_org import OrganisationController
+            
+            # Validate org_token and get organisation_id
+            organisation_id = OrganisationController.get_organisation_id_by_token(db, org_token)
+            if not organisation_id:
+                raise HTTPException(status_code=404, detail="Invalid organization token!")
+            
+            # Get device and verify it belongs to the organization
+            device = db.query(Devices).filter_by(deviceID=deviceID).first()
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found!")
+            
+            # Get the device's profile and check if it belongs to the organization
+            profile = db.query(Profiles).filter_by(id=device.profile).first()
+            if not profile or str(profile.organisation_id) != organisation_id:
+                raise HTTPException(status_code=403, detail="Device does not belong to your organization!")
+            
+            # Get the latest config
+            latest_config = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).first()
+            
+            if not latest_config:
+                # No config exists yet
+                return {
+                    "deviceID": deviceID,
+                    "config_updated": False,
+                    "message": "No configuration found for this device"
+                }
+            
+            # Check config_updated status
+            if latest_config.config_updated == False:
+                # Prepare configuration data to return
+                configuration = {
+                    "deviceID": device.deviceID,
+                    "fileDownloadState": device.fileDownloadState,
+                    "config_updated": False,  # Return current state (False) in response
+                    "configs": {}
+                }
+                
+                for i in range(1, 11):
+                    config_value = getattr(latest_config, f'config{i}', None)
+                    if config_value is not None:
+                        configuration["configs"][f'config{i}'] = config_value
+                
+                # Update config_updated to True after device retrieves the configuration
+                latest_config.config_updated = True
+                db.commit()
+                        
+                return configuration
+            else:
+                # Return just updated status when config_updated is True
+                return {
+                    "deviceID": deviceID,
+                    "config_updated": True,
+                    "message": "Configuration is up to date"
+                }
+        except Exception as e:
+            # Rollback any database changes if there's an error
+            db.rollback()
+            if isinstance(e, HTTPException):
+                raise e
+            else:
+                raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")

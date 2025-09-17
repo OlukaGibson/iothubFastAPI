@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Body
+from fastapi import APIRouter, Depends, HTTPException, Request, Body, Query
 from sqlalchemy.orm import Session
 from controllers.device_data import DeviceDataController, MetadataValuesController, ConfigValuesController
 from schemas.device_data import DeviceDataCreate, MetadataValuesCreate, ConfigValuesCreate
@@ -53,12 +53,11 @@ def get_config_data(
 ):
     return ConfigValuesController.get_config_data(db, deviceID)
 
-@router.post("/config/{org_token}/{deviceID}/update")
-def update_config_with_org_token(
-    org_token: str,
-    deviceID: int,
-    configs: dict = Body(default={}),
+@router.get("/config_update")
+def get_config_update(
+    org_token: str = Query(..., description="Organization token"),
+    deviceID: int = Query(..., description="Device ID"),
     db: Session = Depends(get_db)
 ):
-    """Update device config using org_token authentication. Returns latest config with config_updated=True."""
-    return ConfigValuesController.update_config_with_org_token(db, org_token, deviceID, configs)
+    """Get device config update status. Returns data if config_updated=False, just updated status if True."""
+    return ConfigValuesController.get_config_update_status(db, org_token, deviceID)

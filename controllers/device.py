@@ -235,7 +235,7 @@ class DeviceController:
         return device
 
     @staticmethod
-    def self_config(db: Session, organisation_id, networkID, token):
+    def self_config(db: Session, organisation_id, networkID):
         device = db.query(Devices).join(Profiles).filter(
             Devices.networkID == networkID,
             Profiles.organisation_id == organisation_id
@@ -245,13 +245,19 @@ class DeviceController:
         try:
             profile = db.query(Profiles).filter_by(id=device.profile).first()
             latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
+            
+            # Update config_updated to True since device is fetching its configuration
+            if latest_config:
+                latest_config.config_updated = True
+                db.commit()
+            
             device_details = {
                 'name': device.name,
                 'deviceID': device.deviceID,
                 'networkID': device.networkID,
                 'writekey': device.writekey,
                 'readkey': device.readkey,
-                'config_updated': latest_config.config_updated if latest_config else False,
+                'config_updated': True,  # Always True since device has now fetched config
                 'configs': {}
             }
             if profile and latest_config:
@@ -262,5 +268,7 @@ class DeviceController:
                         device_details['configs'][f'config{i}'] = config_value
             return device_details
         except Exception as e:
+            # Rollback any database changes if there's an error
+            db.rollback()
             return {'message': 'Device self-configuration failed!', 'error': str(e)}, 500
       
