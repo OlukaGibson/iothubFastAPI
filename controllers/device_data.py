@@ -77,6 +77,151 @@ class MetadataValuesController:
         db.commit()
         return new_entry
 
+    @staticmethod
+    def get_metadata_update(db: Session, org_token: str, deviceID: int):
+        """Get metadata update with status information using org_token and deviceID."""
+        try:
+            from controllers.user_org import OrganisationController
+            
+            # Validate org_token and get organisation_id
+            organisation_id = OrganisationController.get_organisation_id_by_token(db, org_token)
+            if not organisation_id:
+                raise HTTPException(status_code=404, detail="Invalid organization token!")
+            
+            # Get device and verify it belongs to the organization
+            device = db.query(Devices).filter_by(deviceID=deviceID).first()
+            if not device:
+                raise HTTPException(status_code=404, detail="Device not found!")
+            
+            # Get the device's profile and check if it belongs to the organization
+            profile = db.query(Profiles).filter_by(id=device.profile).first()
+            if not profile or str(profile.organisation_id) != organisation_id:
+                raise HTTPException(status_code=403, detail="Device does not belong to your organization!")
+            
+            # Get the latest metadata entry
+            latest_metadata = db.query(MetadataValues).filter_by(deviceID=deviceID).order_by(MetadataValues.created_at.desc()).first()
+            
+            # Get the latest config for config_updated status
+            latest_config = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).first()
+            
+            # Prepare the response with status information
+            metadata_response = {
+                "deviceID": deviceID,
+                "status": {
+                    "config_updated": latest_config.config_updated if latest_config else False,
+                    "fileDownloadState": device.fileDownloadState,
+                    "firmwareDownloadState": device.firmwareDownloadState
+                },
+                "metadata": {},
+                "created_at": latest_metadata.created_at if latest_metadata else None
+            }
+            
+            # Add metadata values if they exist
+            if latest_metadata:
+                for i in range(1, 16):
+                    metadata_value = getattr(latest_metadata, f'metadata{i}', None)
+                    if metadata_value is not None:
+                        metadata_response["metadata"][f'metadata{i}'] = metadata_value
+            
+            return metadata_response
+            
+        except Exception as e:
+            # Rollback any database changes if there's an error
+            db.rollback()
+            if isinstance(e, HTTPException):
+                raise e
+            else:
+                raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+    @staticmethod
+    def update_metadata_with_status(db: Session, org_token: str, deviceID: int, metadata_dict: dict):
+        """Update device metadata using org_token and deviceID, return simple success/failure message with status."""
+        try:
+            from controllers.user_org import OrganisationController
+            
+            # Validate org_token and get organisation_id
+            organisation_id = OrganisationController.get_organisation_id_by_token(db, org_token)
+            if not organisation_id:
+                return {
+                    "message": "failure",
+                    "reason": "Invalid organization token",
+                    "status": {
+                        "config_updated": False,
+                        "fileDownloadState": False,
+                        "firmwareDownloadState": "failed"
+                    }
+                }
+            
+            # Get device and verify it belongs to the organization
+            device = db.query(Devices).filter_by(deviceID=deviceID).first()
+            if not device:
+                return {
+                    "message": "failure",
+                    "reason": "Device not found",
+                    "status": {
+                        "config_updated": False,
+                        "fileDownloadState": False,
+                        "firmwareDownloadState": "failed"
+                    }
+                }
+            
+            # Get the device's profile and check if it belongs to the organization
+            profile = db.query(Profiles).filter_by(id=device.profile).first()
+            if not profile or str(profile.organisation_id) != organisation_id:
+                return {
+                    "message": "failure",
+                    "reason": "Device does not belong to your organization",
+                    "status": {
+                        "config_updated": False,
+                        "fileDownloadState": device.fileDownloadState,
+                        "firmwareDownloadState": device.firmwareDownloadState
+                    }
+                }
+            
+            # Prepare metadata data for storage - only store non-None values
+            data_metadata = {}
+            for i in range(1, 16):
+                key = f'metadata{i}'
+                value = metadata_dict.get(key)
+                if value is not None:
+                    data_metadata[key] = value
+                else:
+                    data_metadata[key] = None
+            
+            # Create new metadata entry
+            new_entry = MetadataValues(
+                created_at=datetime.now(),
+                deviceID=device.deviceID,
+                **data_metadata
+            )
+            db.add(new_entry)
+            db.commit()
+            
+            # Get latest config for status
+            latest_config = db.query(ConfigValues).filter_by(deviceID=deviceID).order_by(ConfigValues.created_at.desc()).first()
+            
+            return {
+                "message": "success",
+                "status": {
+                    "config_updated": latest_config.config_updated if latest_config else False,
+                    "fileDownloadState": device.fileDownloadState,
+                    "firmwareDownloadState": device.firmwareDownloadState
+                }
+            }
+            
+        except Exception as e:
+            # Rollback any database changes if there's an error
+            db.rollback()
+            return {
+                "message": "failure",
+                "reason": f"Internal server error: {str(e)}",
+                "status": {
+                    "config_updated": False,
+                    "fileDownloadState": False,
+                    "firmwareDownloadState": "failed"
+                }
+            }
+
 class ConfigValuesController:
     @staticmethod
     def update_config_data(db: Session, deviceID: int, configs: dict):
@@ -264,7 +409,12 @@ class ConfigValuesController:
                 # No config exists yet
                 return {
                     "deviceID": deviceID,
-                    "config_updated": False,
+                    # "config_updated": False,
+                    "status": {
+                        "config_updated": False,
+                        "fileDownloadState": device.fileDownloadState,
+                        "firmwareDownloadState": device.firmwareDownloadState
+                    },
                     "message": "No configuration found for this device"
                 }
             
@@ -274,7 +424,12 @@ class ConfigValuesController:
                 configuration = {
                     "deviceID": device.deviceID,
                     "fileDownloadState": device.fileDownloadState,
-                    "config_updated": False,  # Return current state (False) in response
+                    # "config_updated": True,  # Return True since device is now getting the config
+                    "status": {
+                        "config_updated": True,  # Show true since config is now being updated
+                        "fileDownloadState": device.fileDownloadState,
+                        "firmwareDownloadState": device.firmwareDownloadState
+                    },
                     "configs": {}
                 }
                 
@@ -292,7 +447,12 @@ class ConfigValuesController:
                 # Return just updated status when config_updated is True
                 return {
                     "deviceID": deviceID,
-                    "config_updated": True,
+                    # "config_updated": True,
+                    "status": {
+                        "config_updated": True,  # Show true since config is already updated
+                        "fileDownloadState": device.fileDownloadState,
+                        "firmwareDownloadState": device.firmwareDownloadState
+                    },
                     "message": "Configuration is up to date"
                 }
         except Exception as e:

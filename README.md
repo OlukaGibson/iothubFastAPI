@@ -92,7 +92,7 @@ All endpoints are prefixed with `/api/v1`.
 
 - `POST /api/v1/device_data/update` - Update device data
 - `POST /api/v1/device_data/bulk_update/{deviceID}` - Bulk update device data
-- `POST /api/v1/metadata/update` - Update device metadata
+- `GET /api/v1/metadata_update` - Update device metadata with optional meta1-meta15 parameters and get status
 - `POST /api/v1/config/update` - Update device config
 - `POST /api/v1/config/mass_edit` - Mass edit device configs
 - `GET /api/v1/config/{deviceID}` - Get device config

@@ -257,7 +257,12 @@ class DeviceController:
                 'networkID': device.networkID,
                 'writekey': device.writekey,
                 'readkey': device.readkey,
-                'config_updated': True,  # Always True since device has now fetched config
+                # 'config_updated': True,  # Always True since device has now fetched config
+                'status': {
+                    'config_updated': latest_config.config_updated if latest_config else False,
+                    'fileDownloadState': device.fileDownloadState,
+                    'firmwareDownloadState': device.firmwareDownloadState
+                },
                 'configs': {}
             }
             if profile and latest_config:

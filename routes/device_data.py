@@ -22,13 +22,34 @@ def bulk_update_device_data(
 ):
     return DeviceDataController.bulk_update(db, deviceID, updates)
 
-@router.post("/metadata/update")
-def update_metadata(
-    writekey: str = Body(..., embed=True),
-    metadatas: dict = Body(...),
+@router.get("/metadata_update")
+def update_metadata_with_status(
+    org_token: str = Query(..., description="Organization token"),
+    deviceID: int = Query(..., description="Device ID"),
+    meta1: str = Query(None, description="Metadata field 1"),
+    meta2: str = Query(None, description="Metadata field 2"),
+    meta3: str = Query(None, description="Metadata field 3"),
+    meta4: str = Query(None, description="Metadata field 4"),
+    meta5: str = Query(None, description="Metadata field 5"),
+    meta6: str = Query(None, description="Metadata field 6"),
+    meta7: str = Query(None, description="Metadata field 7"),
+    meta8: str = Query(None, description="Metadata field 8"),
+    meta9: str = Query(None, description="Metadata field 9"),
+    meta10: str = Query(None, description="Metadata field 10"),
+    meta11: str = Query(None, description="Metadata field 11"),
+    meta12: str = Query(None, description="Metadata field 12"),
+    meta13: str = Query(None, description="Metadata field 13"),
+    meta14: str = Query(None, description="Metadata field 14"),
+    meta15: str = Query(None, description="Metadata field 15"),
     db: Session = Depends(get_db)
 ):
-    return MetadataValuesController.update_metadata(db, writekey, metadatas)
+    """Update device metadata and return success/failure message with status information."""
+    metadata_dict = {
+        'metadata1': meta1, 'metadata2': meta2, 'metadata3': meta3, 'metadata4': meta4, 'metadata5': meta5,
+        'metadata6': meta6, 'metadata7': meta7, 'metadata8': meta8, 'metadata9': meta9, 'metadata10': meta10,
+        'metadata11': meta11, 'metadata12': meta12, 'metadata13': meta13, 'metadata14': meta14, 'metadata15': meta15
+    }
+    return MetadataValuesController.update_metadata_with_status(db, org_token, deviceID, metadata_dict)
 
 @router.post("/config/update")
 def update_config_data(

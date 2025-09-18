@@ -36,7 +36,7 @@ This document lists all available API endpoints in the IoTHub FastAPI backend, g
 |----------|--------|---------|
 | `/api/v1/device_data/update` | POST | Update device data |
 | `/api/v1/device_data/bulk_update/{deviceID}` | POST | Bulk update device data |
-| `/api/v1/metadata/update` | POST | Update device metadata |
+| `/api/v1/metadata_update` | GET | Update device metadata with meta1-meta15 parameters and return status |
 | `/api/v1/config/update` | POST | Update device config |
 | `/api/v1/config/mass_edit` | POST | Mass edit device configs |
 | `/api/v1/config/{deviceID}` | GET | Get device config |
