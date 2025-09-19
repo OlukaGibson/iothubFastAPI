@@ -146,9 +146,9 @@ class MetadataValuesController:
                     "message": "failure",
                     "reason": "Invalid organization token",
                     "status": {
-                        "config_updated": False,
-                        "fileDownloadState": False,
-                        "firmwareDownloadState": "failed"
+                        "config_updated": None,
+                        "fileDownloadState": None,
+                        "firmwareDownloadState": None
                     }
                 }
             
@@ -159,9 +159,9 @@ class MetadataValuesController:
                     "message": "failure",
                     "reason": "Device not found",
                     "status": {
-                        "config_updated": False,
-                        "fileDownloadState": False,
-                        "firmwareDownloadState": "failed"
+                        "config_updated": None,
+                        "fileDownloadState": None,
+                        "firmwareDownloadState": None
                     }
                 }
             
@@ -172,9 +172,9 @@ class MetadataValuesController:
                     "message": "failure",
                     "reason": "Device does not belong to your organization",
                     "status": {
-                        "config_updated": False,
-                        "fileDownloadState": device.fileDownloadState,
-                        "firmwareDownloadState": device.firmwareDownloadState
+                        "config_updated": None,
+                        "fileDownloadState": None,
+                        "firmwareDownloadState": None
                     }
                 }
             
@@ -216,9 +216,9 @@ class MetadataValuesController:
                 "message": "failure",
                 "reason": f"Internal server error: {str(e)}",
                 "status": {
-                    "config_updated": False,
-                    "fileDownloadState": False,
-                    "firmwareDownloadState": "failed"
+                    "config_updated": None,
+                    "fileDownloadState": None,
+                    "firmwareDownloadState": None
                 }
             }
 
@@ -411,7 +411,7 @@ class ConfigValuesController:
                     "deviceID": deviceID,
                     # "config_updated": False,
                     "status": {
-                        "config_updated": False,
+                        "config_updated": None,
                         "fileDownloadState": device.fileDownloadState,
                         "firmwareDownloadState": device.firmwareDownloadState
                     },
