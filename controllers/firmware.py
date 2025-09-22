@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from models.firmware import Firmware, FirmwareType
 from google.cloud import storage
 from schemas.firmware import FirmwareUpload
-import os, io, uuid
+import os, io, uuid, zlib
 from intelhex import IntelHex
 from google.oauth2 import service_account
 import json
@@ -42,6 +42,8 @@ class FirmwareController:
 
         # Read firmware file
         firmware_content = firmware_file.file.read()
+        bin_data_for_crc = None
+        
         if firmware_file.filename.endswith('.hex'):
             # Convert hex to bin and upload both
             try:
@@ -53,14 +55,22 @@ class FirmwareController:
             firmware_hex.loadhex(io.StringIO(firmware_content_str))
             firmware_hex.tobinfile(bin_data)
             bin_data.seek(0)
+            # Get binary data for CRC32 calculation
+            bin_data_for_crc = bin_data.read()
+            bin_data.seek(0)  # Reset for upload
             # Upload bin
             bucket.blob(firmware_string).upload_from_file(bin_data)
             # Upload hex
             firmware_string_hex = f'firmware/firmware_file_hex/{firmwareVersion}.hex'
             bucket.blob(firmware_string_hex).upload_from_string(firmware_content)
         else:
+            # For bin files, use the content directly
+            bin_data_for_crc = firmware_content
             # Only upload bin
             bucket.blob(firmware_string).upload_from_string(firmware_content)
+        
+        # Calculate CRC32 checksum from binary data
+        crc32_checksum = format(zlib.crc32(bin_data_for_crc) & 0xffffffff, '08x')
 
         # Bootloader: always store as-is, no conversion
         if firmware_bootloader:
@@ -77,6 +87,7 @@ class FirmwareController:
             firmware_string_bootloader=firmware_string_bootloader,
             firmware_type=firmware_data.get("firmware_type", FirmwareType.beta),
             description=firmware_data.get("description"),
+            crc32=crc32_checksum,
             change1=firmware_data.get("change1"),
             change2=firmware_data.get("change2"),
             change3=firmware_data.get("change3"),

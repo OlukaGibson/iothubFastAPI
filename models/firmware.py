@@ -23,6 +23,8 @@ class Firmware(base):
     firmware_string_bootloader = Column(String(100), default=None, nullable=True)
     firmware_type = Column(Enum(FirmwareType), nullable=True, default=FirmwareType.beta)
     description = Column(String(255), default=None, nullable=True)
+    # firmware CRC32 checksum
+    crc32 = Column(String(100), default=None, nullable=True)
     change1 = Column(String(255), default=None)
     change2 = Column(String(255), default=None)
     change3 = Column(String(255), default=None)
