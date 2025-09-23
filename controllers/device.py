@@ -8,11 +8,38 @@ from models.profile import Profiles
 from models.devicedata_value import DeviceData
 from models.config_value import ConfigValues
 from models.metadata_value import MetadataValues
+from schemas.status import DeviceStatus, FirmwareDownload
 import uuid
 from datetime import datetime
 from fastapi import HTTPException
 
 class DeviceController:
+    @staticmethod
+    def build_device_status(db: Session, device: Devices, latest_config) -> dict:
+        """Build standardized status structure for device responses"""
+        # Get firmware information for the target firmware version
+        firmware_version = "unknown"
+        firmware_crc = "0x00000000"
+        firmware_bin_size = 0
+        
+        if device.targetFirmwareVersion:
+            firmware = db.query(Firmware).filter_by(id=device.targetFirmwareVersion).first()
+            if firmware:
+                firmware_version = firmware.firmware_version
+                firmware_crc = firmware.crc32 or "0x00000000"
+                firmware_bin_size = firmware.firmware_bin_size
+        
+        return {
+            "config_updated": latest_config.config_updated if latest_config else False,
+            "fileDownloadState": device.fileDownloadState,
+            "firmwareDownload": {
+                "firmwareDownloadState": device.firmwareDownloadState,
+                "version": firmware_version,
+                "fwcrc": firmware_crc,
+                "firmware_size": firmware_bin_size
+            }
+        }
+
     @staticmethod
     def create_device(db: Session, organisation_id, device_data):
         # Check for duplicate name, readkey, writekey, deviceID
@@ -257,12 +284,7 @@ class DeviceController:
                 'networkID': device.networkID,
                 'writekey': device.writekey,
                 'readkey': device.readkey,
-                # 'config_updated': True,  # Always True since device has now fetched config
-                'status': {
-                    'config_updated': latest_config.config_updated if latest_config else False,
-                    'fileDownloadState': device.fileDownloadState,
-                    'firmwareDownloadState': device.firmwareDownloadState
-                },
+                'status': DeviceController.build_device_status(db, device, latest_config),
                 'configs': {}
             }
             if profile and latest_config:

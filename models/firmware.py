@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Boolean, String, DateTime, func, ForeignKey, Enum
+from sqlalchemy import Column, Boolean, Integer, String, DateTime, func, ForeignKey, Enum
 from sqlalchemy.orm import relationship
 from utils.database_config import Base as base
 import uuid
@@ -25,6 +25,8 @@ class Firmware(base):
     description = Column(String(255), default=None, nullable=True)
     # firmware CRC32 checksum
     crc32 = Column(String(100), default=None, nullable=True)
+    # firmware binary size in bytes
+    firmware_bin_size = Column(Integer, default=None, nullable=True)
     change1 = Column(String(255), default=None)
     change2 = Column(String(255), default=None)
     change3 = Column(String(255), default=None)

@@ -277,15 +277,32 @@ def download_firmware_file(
 #         }
 #     )
 
-@router.get("/firmware/{org_token}/{firmware_id}/download/{file_type}")
+@router.get("/firmware_download")
 def get_firmware_file_with_org(
     request: Request,
     org_token: str,
-    firmware_id: str,
-    file_type: str,
+    type: str,
+    firmwareId: str = None,
+    firmwareVersion: str = None,
     db: Session = Depends(get_db)
 ):
-    """GET endpoint to download firmware file with Range header support. Uses org_token to lookup organization from database."""
+    """GET endpoint to download firmware file with Range header support. Uses org_token to lookup organization from database.
+    
+    Parameters:
+    - org_token: Organization token (required)
+    - type: File type - 'bin', 'hex', or 'bootloader' (required)
+    - firmwareId: Firmware UUID (optional - use either this or firmwareVersion)
+    - firmwareVersion: Firmware version string (optional - use either this or firmwareId)
+    
+    Either firmwareId or firmwareVersion must be provided.
+    """
+    
+    # Validate that either firmwareId or firmwareVersion is provided
+    if not firmwareId and not firmwareVersion:
+        raise HTTPException(status_code=400, detail="Either firmwareId or firmwareVersion must be provided.")
+    
+    if firmwareId and firmwareVersion:
+        raise HTTPException(status_code=400, detail="Provide either firmwareId or firmwareVersion, not both.")
     
     # Look up organization by token from database
     from controllers.user_org import OrganisationController
@@ -294,18 +311,40 @@ def get_firmware_file_with_org(
         raise HTTPException(status_code=404, detail="Invalid organization token.")
     
     try:
-        firmware_uuid = uuid.UUID(firmware_id)
         organisation_uuid = uuid.UUID(str(organisation_id))
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid firmware_id or organisation_id format. Must be UUID.")
+        raise HTTPException(status_code=400, detail="Invalid organisation_id format. Must be UUID.")
     
     credentials = None  # Set your GCP credentials if needed
     bucket_name = os.getenv("BUCKET_NAME")
     
-    # First, get file size to parse range header
-    file_data, file_size, blob_path, filename, content_type = FirmwareController.download_firmware_file_by_id(
-        db, organisation_uuid, firmware_uuid, file_type, bucket_name, credentials
-    )
+    # Determine which download method to use based on provided parameters
+    if firmwareId:
+        # Use firmware ID method
+        try:
+            firmware_uuid = uuid.UUID(firmwareId)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid firmwareId format. Must be UUID.")
+        
+        # First, get file size to parse range header
+        file_data, file_size, blob_path, _, _ = FirmwareController.download_firmware_file_by_id(
+            db, organisation_uuid, firmware_uuid, type, bucket_name, credentials
+        )
+        
+        # Get firmware version for filename
+        from models.firmware import Firmware
+        firmware = db.query(Firmware).filter_by(
+            organisation_id=organisation_uuid,
+            id=firmware_uuid
+        ).first()
+        firmware_version_for_filename = firmware.firmware_version if firmware else firmwareId
+    else:
+        # Use firmware version method
+        # First, get file size to parse range header
+        file_data, file_size, blob_path, _, _ = FirmwareController.download_firmware_file(
+            db, organisation_uuid, firmwareVersion, type, bucket_name, credentials
+        )
+        firmware_version_for_filename = firmwareVersion
     
     if not blob_path:
         raise HTTPException(status_code=404, detail="Requested firmware file not found.")
@@ -329,18 +368,17 @@ def get_firmware_file_with_org(
         
         # If valid range, re-download with range
         if range_start is not None and range_end is not None:
-            file_data, file_size, blob_path, range_start, range_end = FirmwareController.download_firmware_file_by_id(
-                db, organisation_uuid, firmware_uuid, file_type, bucket_name, credentials, range_start, range_end
-            )
+            if firmwareId:
+                firmware_uuid = uuid.UUID(firmwareId)
+                file_data, file_size, blob_path, range_start, range_end = FirmwareController.download_firmware_file_by_id(
+                    db, organisation_uuid, firmware_uuid, type, bucket_name, credentials, range_start, range_end
+                )
+            else:
+                file_data, file_size, blob_path, range_start, range_end = FirmwareController.download_firmware_file(
+                    db, organisation_uuid, firmwareVersion, type, bucket_name, credentials, range_start, range_end
+                )
     
-    # Get firmware version for filename
-    from models.firmware import Firmware
-    firmware = db.query(Firmware).filter_by(
-        organisation_id=organisation_uuid,
-        id=firmware_uuid
-    ).first()
-    firmware_version = firmware.firmware_version if firmware else firmware_id
-    final_filename = f"{firmware_version}.{file_type if file_type != 'bootloader' else 'hex'}"
+    final_filename = f"{firmware_version_for_filename}.{type if type != 'bootloader' else 'hex'}"
     
     # Prepare response headers
     headers = {

@@ -10,7 +10,36 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException
 import uuid
 
+# Import new status schemas
+from schemas.status import DeviceStatus, FirmwareDownload
+
 class DeviceDataController:
+    @staticmethod
+    def build_device_status(db: Session, device: Devices, latest_config) -> dict:
+        """Build standardized status structure for device responses"""
+        # Get firmware information for the target firmware version
+        firmware_version = "unknown"
+        firmware_crc = "0x00000000"
+        firmware_bin_size = 0
+        
+        if device.targetFirmwareVersion:
+            firmware = db.query(Firmware).filter_by(id=device.targetFirmwareVersion).first()
+            if firmware:
+                firmware_version = firmware.firmware_version
+                firmware_crc = firmware.crc32 or "0x00000000"
+                firmware_bin_size = firmware.firmware_bin_size
+        
+        return {
+            "config_updated": latest_config.config_updated if latest_config else False,
+            "fileDownloadState": device.fileDownloadState,
+            "firmwareDownload": {
+                "firmwareDownloadState": device.firmwareDownloadState,
+                "version": firmware_version,
+                "fwcrc": firmware_crc,
+                "firmware_size": firmware_bin_size
+            }
+        }
+
     @staticmethod
     def update_device_data(db: Session, writekey: str, fields: dict):
         device = db.query(Devices).filter_by(writekey=writekey).first()
@@ -107,11 +136,7 @@ class MetadataValuesController:
             # Prepare the response with status information
             metadata_response = {
                 "deviceID": deviceID,
-                "status": {
-                    "config_updated": latest_config.config_updated if latest_config else False,
-                    "fileDownloadState": device.fileDownloadState,
-                    "firmwareDownloadState": device.firmwareDownloadState
-                },
+                "status": DeviceDataController.build_device_status(db, device, latest_config),
                 "metadata": {},
                 "created_at": latest_metadata.created_at if latest_metadata else None
             }
@@ -148,7 +173,12 @@ class MetadataValuesController:
                     "status": {
                         "config_updated": None,
                         "fileDownloadState": None,
-                        "firmwareDownloadState": None
+                        "firmwareDownload": {
+                            "firmwareDownloadState": None,
+                            "version": "unknown",
+                            "fwcrc": "0x00000000",
+                            "firmware_size": 0
+                        }
                     }
                 }
             
@@ -161,7 +191,12 @@ class MetadataValuesController:
                     "status": {
                         "config_updated": None,
                         "fileDownloadState": None,
-                        "firmwareDownloadState": None
+                        "firmwareDownload": {
+                            "firmwareDownloadState": None,
+                            "version": "unknown",
+                            "fwcrc": "0x00000000",
+                            "firmware_size": 0
+                        }
                     }
                 }
             
@@ -174,7 +209,12 @@ class MetadataValuesController:
                     "status": {
                         "config_updated": None,
                         "fileDownloadState": None,
-                        "firmwareDownloadState": None
+                        "firmwareDownload": {
+                            "firmwareDownloadState": None,
+                            "version": "unknown",
+                            "fwcrc": "0x00000000",
+                            "firmware_size": 0
+                        }
                     }
                 }
             
@@ -202,11 +242,7 @@ class MetadataValuesController:
             
             return {
                 "message": "success",
-                "status": {
-                    "config_updated": latest_config.config_updated if latest_config else False,
-                    "fileDownloadState": device.fileDownloadState,
-                    "firmwareDownloadState": device.firmwareDownloadState
-                }
+                "status": DeviceDataController.build_device_status(db, device, latest_config)
             }
             
         except Exception as e:
@@ -218,7 +254,12 @@ class MetadataValuesController:
                 "status": {
                     "config_updated": None,
                     "fileDownloadState": None,
-                    "firmwareDownloadState": None
+                    "firmwareDownload": {
+                        "firmwareDownloadState": None,
+                        "version": "unknown",
+                        "fwcrc": "0x00000000",
+                        "firmware_size": 0
+                    }
                 }
             }
 
@@ -244,11 +285,14 @@ class ConfigValuesController:
         db.commit()
         db.refresh(new_entry)
         
+        # Get latest config for status
+        latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
+        
         # Return configuration in same format as get_config_data
         configuration = {
             "deviceID": device.deviceID,
             "fileDownloadState": device.fileDownloadState,
-            "config_updated": new_entry.config_updated,
+            "status": DeviceDataController.build_device_status(db, device, latest_config),
             "configs": {}
         }
         for i in range(1, 11):
@@ -284,11 +328,14 @@ class ConfigValuesController:
                 db.flush()  # Flush to get the new config data
                 db.refresh(new_config)
                 
-                # Create config response with config_updated field
+                # Get latest config for status
+                latest_config = db.query(ConfigValues).filter_by(deviceID=device.deviceID).order_by(ConfigValues.created_at.desc()).first()
+                
+                # Create config response with status field
                 device_config = {
                     "deviceID": device.deviceID,
                     "fileDownloadState": device.fileDownloadState,
-                    "config_updated": new_config.config_updated,
+                    "status": DeviceDataController.build_device_status(db, device, latest_config),
                     "configs": {}
                 }
                 for i in range(1, 11):
@@ -313,7 +360,7 @@ class ConfigValuesController:
         configuration = {
             "deviceID": device.deviceID,
             "fileDownloadState": device.fileDownloadState,
-            "config_updated": config_data.config_updated,
+            "status": DeviceDataController.build_device_status(db, device, config_data),
             "configs": {}
         }
         for i in range(1, 11):
@@ -370,7 +417,7 @@ class ConfigValuesController:
         configuration = {
             "deviceID": device.deviceID,
             "fileDownloadState": device.fileDownloadState,
-            "config_updated": new_config.config_updated,
+            "status": DeviceDataController.build_device_status(db, device, new_config),
             "configs": {}
         }
         
@@ -407,14 +454,13 @@ class ConfigValuesController:
             
             if not latest_config:
                 # No config exists yet
+                # Build status with None config_updated
+                status = DeviceDataController.build_device_status(db, device, None)
+                status["config_updated"] = None  # Override to show no config exists
+                
                 return {
                     "deviceID": deviceID,
-                    # "config_updated": False,
-                    "status": {
-                        "config_updated": None,
-                        "fileDownloadState": device.fileDownloadState,
-                        "firmwareDownloadState": device.firmwareDownloadState
-                    },
+                    "status": status,
                     "message": "No configuration found for this device"
                 }
             
@@ -424,14 +470,11 @@ class ConfigValuesController:
                 configuration = {
                     "deviceID": device.deviceID,
                     "fileDownloadState": device.fileDownloadState,
-                    # "config_updated": True,  # Return True since device is now getting the config
-                    "status": {
-                        "config_updated": True,  # Show true since config is now being updated
-                        "fileDownloadState": device.fileDownloadState,
-                        "firmwareDownloadState": device.firmwareDownloadState
-                    },
+                    "status": DeviceDataController.build_device_status(db, device, latest_config),
                     "configs": {}
                 }
+                # Override config_updated to True since device is now getting the config
+                configuration["status"]["config_updated"] = True
                 
                 for i in range(1, 11):
                     config_value = getattr(latest_config, f'config{i}', None)
@@ -447,12 +490,7 @@ class ConfigValuesController:
                 # Return just updated status when config_updated is True
                 return {
                     "deviceID": deviceID,
-                    # "config_updated": True,
-                    "status": {
-                        "config_updated": True,  # Show true since config is already updated
-                        "fileDownloadState": device.fileDownloadState,
-                        "firmwareDownloadState": device.firmwareDownloadState
-                    },
+                    "status": DeviceDataController.build_device_status(db, device, latest_config),
                     "message": "Configuration is up to date"
                 }
         except Exception as e:

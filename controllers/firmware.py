@@ -43,6 +43,7 @@ class FirmwareController:
         # Read firmware file
         firmware_content = firmware_file.file.read()
         bin_data_for_crc = None
+        firmware_bin_size = 0  # Initialize bin size variable
         
         if firmware_file.filename.endswith('.hex'):
             # Convert hex to bin and upload both
@@ -57,6 +58,7 @@ class FirmwareController:
             bin_data.seek(0)
             # Get binary data for CRC32 calculation
             bin_data_for_crc = bin_data.read()
+            firmware_bin_size = len(bin_data_for_crc)  # Store bin file size
             bin_data.seek(0)  # Reset for upload
             # Upload bin
             bucket.blob(firmware_string).upload_from_file(bin_data)
@@ -66,6 +68,7 @@ class FirmwareController:
         else:
             # For bin files, use the content directly
             bin_data_for_crc = firmware_content
+            firmware_bin_size = len(bin_data_for_crc)  # Store bin file size
             # Only upload bin
             bucket.blob(firmware_string).upload_from_string(firmware_content)
         
@@ -88,6 +91,7 @@ class FirmwareController:
             firmware_type=firmware_data.get("firmware_type", FirmwareType.beta),
             description=firmware_data.get("description"),
             crc32=crc32_checksum,
+            firmware_bin_size=firmware_bin_size,  # Add the bin size here
             change1=firmware_data.get("change1"),
             change2=firmware_data.get("change2"),
             change3=firmware_data.get("change3"),
