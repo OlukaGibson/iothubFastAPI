@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from models.firmware import Firmware, FirmwareType
 from google.cloud import storage
 from schemas.firmware import FirmwareUpload
+from utils.gcp_utils import load_gcp_credentials
 import os, io, uuid, zlib
 from intelhex import IntelHex
 from google.oauth2 import service_account
@@ -26,12 +27,14 @@ class FirmwareController:
         ).first():
             raise HTTPException(status_code=400, detail="Firmware version already exists for this organisation.")
 
-        # Parse credentials if not provided
+        # Load credentials if not provided
         if credentials is None:
-            credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-            if credentials_json:
-                credentials_dict = json.loads(credentials_json)
-                credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            credentials = load_gcp_credentials()
+            if credentials is None:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Google Cloud Storage credentials not available. Please check your GCP configuration."
+                )
         storage_client = storage.Client(credentials=credentials)
         bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
 
@@ -145,12 +148,14 @@ class FirmwareController:
         if not blob_path:
             raise HTTPException(status_code=404, detail="Requested firmware file not found.")
 
-        # Parse credentials if not provided
+        # Load credentials if not provided
         if credentials is None:
-            credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-            if credentials_json:
-                credentials_dict = json.loads(credentials_json)
-                credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            credentials = load_gcp_credentials()
+            if credentials is None:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Google Cloud Storage credentials not available. Please check your GCP configuration."
+                )
         storage_client = storage.Client(credentials=credentials)
         bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
         blob = bucket.blob(blob_path)
@@ -211,12 +216,14 @@ class FirmwareController:
         if not blob_path:
             raise HTTPException(status_code=404, detail="Requested firmware file not found.")
 
-        # Parse credentials if not provided
+        # Load credentials if not provided
         if credentials is None:
-            credentials_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-            if credentials_json:
-                credentials_dict = json.loads(credentials_json)
-                credentials = service_account.Credentials.from_service_account_info(credentials_dict)
+            credentials = load_gcp_credentials()
+            if credentials is None:
+                raise HTTPException(
+                    status_code=500, 
+                    detail="Google Cloud Storage credentials not available. Please check your GCP configuration."
+                )
         storage_client = storage.Client(credentials=credentials)
         bucket = storage_client.bucket(bucket_name or os.getenv("BUCKET_NAME"))
         blob = bucket.blob(blob_path)

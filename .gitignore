@@ -9,4 +9,8 @@
 *.log
 *.egg
 *.egg-info
-*.dist-info 
+*.dist-info
+
+# Google Cloud credentials
+service-account.json
+*.json 
