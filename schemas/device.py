@@ -23,13 +23,20 @@ class DeviceCreate(DeviceBase):
 class DeviceUpdate(DeviceBase):
     pass
 
-class DeviceResponse(DeviceBase):
+class DeviceResponse(BaseModel):
     id: UUID
+    name: str
     readkey: str
     writekey: str
     deviceID: int
-    created_at: Optional[datetime.datetime]
+    networkID: Optional[str] = None
+    profile: UUID
+    currentFirmwareVersion: Optional[str] = None  # Changed from UUID to str
+    previousFirmwareVersion: Optional[str] = None  # Changed from UUID to str
+    targetFirmwareVersion: Optional[str] = None    # Changed from UUID to str
+    fileDownloadState: Optional[bool] = False
     firmwareDownloadState: str
+    created_at: Optional[datetime.datetime]
     profile_name: Optional[str] = None
     last_posted_time: Optional[datetime.datetime] = None
 
@@ -58,5 +65,13 @@ class DeviceDetailResponse(BaseModel):
     config_names: Dict[str, str] = {}  # Maps config1, config2, etc. to real names
     metadata_names: Dict[str, str] = {}  # Maps metadata1, metadata2, etc. to real names
 
+    class Config:
+        from_attributes = True
+
+class DeviceFirmwareUpdate(BaseModel):
+    """Schema for updating device firmware"""
+    firmwareID: UUID = Field(..., description="UUID of the firmware to assign to the device")
+    firmwareVersion: str = Field(..., description="Version string of the firmware")
+    
     class Config:
         from_attributes = True

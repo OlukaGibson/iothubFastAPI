@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 from controllers.device import DeviceController
-from schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceDetailResponse
+from schemas.device import DeviceCreate, DeviceUpdate, DeviceResponse, DeviceDetailResponse, DeviceFirmwareUpdate
 from utils.security import get_user_with_org_context
 from utils.database_config import get_db
 import uuid
@@ -19,26 +19,22 @@ def safe_uuid_convert(value) -> Optional[uuid.UUID]:
         return None
 
 def sanitize_device_response(device_data):
-    """Sanitize device data to ensure valid UUIDs"""
-    if hasattr(device_data, '__dict__'):
-        # Handle SQLAlchemy model objects
+    """Sanitize device data to ensure valid UUIDs for raw database objects"""
+    # Only sanitize if this is a raw SQLAlchemy model with UUID fields
+    # The controller already converts UUIDs to version strings, so don't process those
+    if hasattr(device_data, '__dict__') and hasattr(device_data, '__table__'):
+        # This is a raw SQLAlchemy model object - sanitize UUID fields
         data = device_data.__dict__.copy()
-    else:
-        # Handle dict objects
-        data = device_data.copy() if isinstance(device_data, dict) else device_data
-    
-    # Convert invalid UUID fields to None
-    uuid_fields = ['currentFirmwareVersion', 'previousFirmwareVersion', 'targetFirmwareVersion']
-    for field in uuid_fields:
-        if hasattr(data, field) if not isinstance(data, dict) else field in data:
-            value = getattr(data, field) if not isinstance(data, dict) else data[field]
-            safe_value = safe_uuid_convert(value)
-            if not isinstance(data, dict):
-                setattr(data, field, safe_value)
-            else:
+        uuid_fields = ['currentFirmwareVersion', 'previousFirmwareVersion', 'targetFirmwareVersion']
+        for field in uuid_fields:
+            if field in data:
+                value = data[field]
+                safe_value = safe_uuid_convert(value)
                 data[field] = safe_value
+        return data
     
-    return data
+    # For dict objects or already processed data, return as-is
+    return device_data
 
 def get_organisation_id_from_token(user_data) -> uuid.UUID:
     """Extract organisation ID from JWT token data stored in User object"""
@@ -97,19 +93,21 @@ def get_device(
 #     result = DeviceController.update_device(db, organisation_id, deviceID, device_update)
 #     return sanitize_device_response(result)
 
-# @router.post("/device/{deviceID}/update_firmware", response_model=DeviceResponse)
-# def update_firmware(
-#     deviceID: int,
-#     payload: dict = Body(...),
-#     db: Session = Depends(get_db),
-#     organisation_id: uuid.UUID = Depends(get_organisation_id_from_user)
-# ):
-#     firmwareID = payload.get('firmwareID')
-#     firmwareVersion = payload.get('firmwareVersion')
-#     if not firmwareID or not firmwareVersion:
-#         raise HTTPException(status_code=400, detail="Firmware ID and version required")
-#     result = DeviceController.update_firmware(db, organisation_id, deviceID, uuid.UUID(firmwareID), firmwareVersion)
-#     return sanitize_device_response(result)
+@router.post("/device/{deviceID}/update_firmware", response_model=DeviceResponse)
+def update_firmware(
+    deviceID: int,
+    firmware_update: DeviceFirmwareUpdate = Body(...),
+    db: Session = Depends(get_db),
+    organisation_id: uuid.UUID = Depends(get_organisation_id_from_token)
+):
+    result = DeviceController.update_firmware(
+        db, 
+        organisation_id, 
+        deviceID, 
+        firmware_update.firmwareID, 
+        firmware_update.firmwareVersion
+    )
+    return sanitize_device_response(result)
 
 @router.get("/network/selfconfig")
 def self_config(
